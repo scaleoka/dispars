@@ -128,7 +128,7 @@ on:
   schedule:
     - cron: '0 0 * * *'    # daily at midnight UTC
     - cron: '0 0 * * 0'    # weekly on Sunday at midnight UTC
-  workflow_dispatch:
+  workflow_dispatch: {}    # manual trigger via GitHub Actions UI
 
 jobs:
   parse:
