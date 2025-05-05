@@ -1,0 +1,35 @@
+name: Parse Discord Messages
+
+on:
+  schedule:
+    - cron: '0 0 * * *'    # daily at midnight UTC
+    - cron: '0 0 * * 0'    # weekly on Sunday at midnight UTC
+  workflow_dispatch: {}    # manual trigger via GitHub Actions UI
+
+jobs:
+  parse:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Discord parser
+        env:
+          DISCORD_USER_TOKEN: ${{ secrets.DISCORD_USER_TOKEN }}
+          GUILD_ID:             ${{ secrets.GUILD_ID }}
+          CHANNEL_IDS:          ${{ secrets.CHANNEL_IDS }}
+          WEEK_DAYS:            '7'
+          GOOGLE_SHEET_ID:      ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_CREDS_JSON:    ${{ secrets.GOOGLE_CREDS_JSON }}
+          GOOGLE_CREDS_JSON_PATH: creds.json
+        run: |
+          echo "$GOOGLE_CREDS_JSON" > "$GOOGLE_CREDS_JSON_PATH"
+          python parse_discord.py
