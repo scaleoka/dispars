@@ -1,7 +1,3 @@
-os
-time
 requests
-datetime
-timedelta
 gspread
 oauth2client
