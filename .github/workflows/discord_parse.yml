@@ -28,5 +28,5 @@ jobs:
           CHANNEL_IDS:          ${{ secrets.CHANNEL_IDS }}
           WEEK_DAYS:            '7'
           GOOGLE_SHEET_ID:      ${{ secrets.GOOGLE_SHEET_ID }}
-          GOOGLE_CREDS_JSON:    ${{ secrets.GOOGLE_CREDS_JSON }}
+          GOOGLE_CREDS_JSON:    ${{ secrets.GOOGLE_CREDS_JSON }}    # ← эта строка обязательно должна быть
         run: python parse_discord.py
