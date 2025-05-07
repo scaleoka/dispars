@@ -2,3 +2,4 @@ discum
 gspread
 oauth2client
 requests
+google-api-python-client
