@@ -2,6 +2,7 @@
 import os
 import time
 import json
+import re
 import requests
 from datetime import datetime, timedelta
 import gspread
@@ -9,13 +10,15 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # Environment variables:
 # DISCORD_USER_TOKEN: Your user token (self-bot)
-# CHANNEL_IDS: comma-separated list of channel IDs to parse
+# CHANNEL_IDS: comma-separated or newline-separated list of channel IDs to parse
 # WEEK_DAYS: number of days back to fetch (default 7)
 # GOOGLE_SHEET_ID: target Google Sheet ID
 # GOOGLE_CREDS_JSON: full JSON credentials string for service account
 
 DISCORD_USER_TOKEN = os.getenv("DISCORD_USER_TOKEN")
-CHANNEL_IDS = [c.strip() for c in os.getenv("CHANNEL_IDS", "").split(",") if c.strip()]
+# Split CHANNEL_IDS on commas or any whitespace (including newlines)
+raw_ids = os.getenv("CHANNEL_IDS", "")
+CHANNEL_IDS = [c for c in re.split(r"[\s,]+", raw_ids) if c]
 WEEK_DAYS = int(os.getenv("WEEK_DAYS", "7"))
 SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
 GOOGLE_CREDS_JSON = os.getenv("GOOGLE_CREDS_JSON")
@@ -55,14 +58,16 @@ def fetch_messages(channel_id, after_ts, before_ts=None):
 
 
 def main():
+    # Validate env vars
     if not DISCORD_USER_TOKEN:
         raise RuntimeError("DISCORD_USER_TOKEN env variable is not set.")
     if not CHANNEL_IDS:
-        raise RuntimeError("CHANNEL_IDS env variable is not set.")
+        raise RuntimeError("CHANNEL_IDS env variable is not set or empty.")
     if not SHEET_ID:
         raise RuntimeError("GOOGLE_SHEET_ID env variable is not set.")
 
     # Debug output
+    print(f"Parsed CHANNEL_IDS ({len(CHANNEL_IDS)}): {CHANNEL_IDS}")
     print("Using SHEET_ID:", SHEET_ID)
     print("CREDS JSON length:", len(GOOGLE_CREDS_JSON or ""))
 
@@ -73,15 +78,17 @@ def main():
     client = get_sheets_client()
     spreadsheet = client.open_by_key(SHEET_ID)
 
-    # For each channel, create/clear its own sheet and append messages
     for chan in CHANNEL_IDS:
+        # Each channel gets its own sheet named by ID
         title = chan
+        # Clear or create worksheet
         try:
             ws = spreadsheet.worksheet(title)
             ws.clear()
         except gspread.exceptions.WorksheetNotFound:
             ws = spreadsheet.add_worksheet(title=title, rows="1000", cols="5")
 
+        # Write header and fetch messages
         ws.append_row(["channel_id", "message_id", "author", "timestamp", "content"])
         msgs = fetch_messages(chan, after_ms)
         for m in msgs:
@@ -93,7 +100,6 @@ def main():
                 ts.isoformat(),
                 m.get("content", "")
             ])
-
 
 if __name__ == "__main__":
     main()
