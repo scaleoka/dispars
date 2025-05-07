@@ -1,99 +1,89 @@
-#!/usr/bin/env python3
 import os
 import time
 import json
 import re
-import discum
-import gspread
 from datetime import datetime, timedelta
+import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+from playwright.sync_api import sync_playwright
 
-# Environment variables:
-# DISCORD_USER_TOKEN: your user token (self-bot, used by Discum)
-# CHANNEL_IDS: comma- or whitespace-separated list of channel IDs
-# WEEK_DAYS: days back to fetch (default 7)
-# GOOGLE_SHEET_ID: Google Sheets ID
-# GOOGLE_CREDS_JSON: full JSON credentials string for your service account
-
-DISCORD_USER_TOKEN = os.getenv("DISCORD_USER_TOKEN")
-raw_ids = os.getenv("CHANNEL_IDS", "")
-CHANNEL_IDS = [c for c in re.split(r"[\s,]+", raw_ids) if c]
-WEEK_DAYS = int(os.getenv("WEEK_DAYS", "7"))
+# env vars
+TOKEN = os.getenv("DISCORD_USER_TOKEN")
+CHANNEL_IDS = [c for c in re.split(r"[\s,]+", os.getenv("CHANNEL_IDS","")) if c]
+WEEK_DAYS = int(os.getenv("WEEK_DAYS","7"))
 SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
-GOOGLE_CREDS_JSON = os.getenv("GOOGLE_CREDS_JSON")
+CREDS_JSON = os.getenv("GOOGLE_CREDS_JSON")
 
-def get_sheets_client():
-    if not GOOGLE_CREDS_JSON:
-        raise RuntimeError("GOOGLE_CREDS_JSON env variable is not set.")
-    creds_info = json.loads(GOOGLE_CREDS_JSON)
-    print(f"[DEBUG] Service account email: {creds_info.get('client_email')}")
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
-    ]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scopes)
+# Google Sheets client
+def get_sheets():
+    info = json.loads(CREDS_JSON)
+    scopes = ["https://www.googleapis.com/auth/spreadsheets",
+              "https://www.googleapis.com/auth/drive"]
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(info, scopes)
     return gspread.authorize(creds)
 
-def fetch_messages(bot, channel_id, cutoff_ms):
-    """Use Discum.getMessages (gateway-powered REST) to paginate history."""
-    all_msgs = []
-    before = None
+# Скроллим канал, собираем сообщения из DOM
+def scrape_channel(page, chan_id, cutoff_ts):
+    url = f"https://discord.com/channels/{os.getenv('GUILD_ID')}/{chan_id}"
+    page.goto(url)
+    # вставляем токен в localStorage и перезагружаем
+    page.evaluate(f"""() => {{ 
+        window.localStorage.token = "{TOKEN}";
+    }}""")
+    page.reload()
+
+    messages = []
+    last_height = 0
     while True:
-        chunk = bot.getMessages(channel_id, 100, before)
-        if not chunk:
+        # Парсим видимые сообщения
+        elems = page.query_selector_all("div.message-2qnXI6")
+        for el in elems:
+            try:
+                ts = el.query_selector("time") .get_attribute("datetime")
+                t = datetime.fromisoformat(ts.replace("Z","+00:00"))
+            except:
+                continue
+            if (datetime.utcnow() - t).days > WEEK_DAYS:
+                return messages
+            author = el.query_selector("h2 .username-1A8OIy").inner_text()
+            content_el = el.query_selector("div.markup-2BOw-j")
+            text = content_el.inner_text() if content_el else ""
+            msg_id = el.get_attribute("id") or ""
+            item = {"id": msg_id, "author":author, "timestamp":t.isoformat(), "content": text}
+            if item not in messages:
+                messages.append(item)
+
+        # Скроллим наверх, пока не упремся в cutoff
+        page.keyboard.press("PageUp")
+        time.sleep(0.5)
+        new_height = page.evaluate("document.scrollingElement.scrollTop")
+        if abs(new_height - last_height) < 10:
             break
-        print(f"[DEBUG] Retrieved {len(chunk)} messages from {channel_id}")
-        for m in chunk:
-            ts = int(datetime.fromisoformat(m["timestamp"].replace("Z", "+00:00")).timestamp()*1000)
-            if ts < cutoff_ms:
-                print(f"[DEBUG] Hit cutoff on message {m['id']} → stopping.")
-                return all_msgs
-            all_msgs.append(m)
-        before = chunk[-1]["id"]
-        time.sleep(1)
-    return all_msgs
+        last_height = new_height
+
+    return messages
 
 def main():
-    # Validate
-    missing = [v for v in ["DISCORD_USER_TOKEN","CHANNEL_IDS","GOOGLE_SHEET_ID","GOOGLE_CREDS_JSON"]
-               if not os.getenv(v)]
-    if missing:
-        raise RuntimeError(f"Missing env vars: {', '.join(missing)}")
+    sheet = get_sheets().open_by_key(SHEET_ID)
+    cutoff = datetime.utcnow() - timedelta(days=WEEK_DAYS)
 
-    cutoff_ms = int((datetime.utcnow() - timedelta(days=WEEK_DAYS)).timestamp() * 1000)
-    print(f"[INFO] Channels: {CHANNEL_IDS}")
-    print(f"[INFO] Sheet ID: {SHEET_ID}")
-    print(f"[INFO] Cutoff (ms): {cutoff_ms}")
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        for chan in CHANNEL_IDS:
+            print(f"Scraping {chan} …")
+            msgs = scrape_channel(page, chan, cutoff)
+            print(f" → got {len(msgs)} messages")
+            # создаём лист
+            try:
+                ws = sheet.worksheet(chan)
+                ws.clear()
+            except:
+                ws = sheet.add_worksheet(title=chan, rows="1000", cols="5")
+            ws.append_row(["channel_id","message_id","author","timestamp","content"])
+            for m in msgs:
+                ws.append_row([chan, m["id"], m["author"], m["timestamp"], m["content"]])
+        browser.close()
 
-    # Init Discum client
-    bot = discum.Client(token=DISCORD_USER_TOKEN, log=False)
-
-    # Init Sheets client
-    sheets_client = get_sheets_client()
-    spreadsheet = sheets_client.open_by_key(SHEET_ID)
-
-    for channel in CHANNEL_IDS:
-        title = channel  if len(channel)<=100 else channel[-100:]
-        try:
-            ws = spreadsheet.worksheet(title)
-            ws.clear()
-        except gspread.exceptions.WorksheetNotFound:
-            ws = spreadsheet.add_worksheet(title=title, rows="1000", cols="5")
-
-        ws.append_row(["channel_id","message_id","author","timestamp","content"])
-        msgs = fetch_messages(bot, channel, cutoff_ms)
-        print(f"[INFO] Fetched {len(msgs)} messages for {channel}")
-        for m in msgs:
-            ts = datetime.fromisoformat(m["timestamp"].replace("Z", "+00:00"))
-            ws.append_row([
-                channel,
-                m["id"],
-                m["author"]["username"],
-                ts.isoformat(),
-                m.get("content","")
-            ])
-
-    bot.gateway.close()
-
-if __name__ == "__main__":
+if __name__=="__main__":
     main()
