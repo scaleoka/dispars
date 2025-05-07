@@ -7,6 +7,7 @@ import discum
 from datetime import datetime, timedelta
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+from googleapiclient.discovery import build
 
 # Environment variables:
 # DISCORD_USER_TOKEN, CHANNEL_IDS, WEEK_DAYS, GOOGLE_SHEET_ID, GOOGLE_CREDS_JSON
