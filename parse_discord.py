@@ -54,29 +54,6 @@ def fetch_messages(channel_id, after_ts, before_ts=None):
     return all_msgs
 
 
-def get_channel_info(channel_id):
-    """Return channel data including parent_id."""
-    url = f"{API_BASE}/channels/{channel_id}"
-    resp = requests.get(url, headers=HEADERS)
-    resp.raise_for_status()
-    return resp.json()
-
-
-def get_category_name(parent_id, cache):
-    """Return category name by ID, cache results to minimize calls."""
-    if parent_id in cache:
-        return cache[parent_id]
-    if not parent_id:
-        cache[parent_id] = "Uncategorized"
-    else:
-        url = f"{API_BASE}/channels/{parent_id}"
-        resp = requests.get(url, headers=HEADERS)
-        resp.raise_for_status()
-        data = resp.json()
-        cache[parent_id] = data["name"]
-    return cache[parent_id]
-
-
 def main():
     if not DISCORD_USER_TOKEN:
         raise RuntimeError("DISCORD_USER_TOKEN env variable is not set.")
@@ -89,38 +66,33 @@ def main():
     start = now - timedelta(days=WEEK_DAYS)
     after_ms = int(start.timestamp() * 1000)
 
-    # Group channels by their category
-    cat_cache = {}
-    grouped = {}
-    for chan_id in CHANNEL_IDS:
-        info = get_channel_info(chan_id)
-        parent_id = info.get("parent_id")
-        cat_name = get_category_name(parent_id, cat_cache)
-        grouped.setdefault(cat_name, []).append(chan_id)
-
     client = get_sheets_client()
     spreadsheet = client.open_by_key(SHEET_ID)
 
-    # For each category, create/clear a sheet and append messages
-    for category, chans in grouped.items():
+    # For each channel, create/clear its own sheet and append messages
+    for chan in CHANNEL_IDS:
+        # Use channel ID as sheet name
+        title = chan
         try:
-            ws = spreadsheet.worksheet(category)
+            ws = spreadsheet.worksheet(title)
             ws.clear()
         except gspread.exceptions.WorksheetNotFound:
-            ws = spreadsheet.add_worksheet(title=category, rows="1000", cols="5")
+            ws = spreadsheet.add_worksheet(title=title, rows="1000", cols="5")
 
+        # Header row
         ws.append_row(["channel_id", "message_id", "author", "timestamp", "content"])
-        for chan in chans:
-            msgs = fetch_messages(chan, after_ms)
-            for m in msgs:
-                ts = datetime.fromisoformat(m["timestamp"].replace("Z", "+00:00"))
-                ws.append_row([
-                    chan,
-                    m["id"],
-                    m["author"]["username"],
-                    ts.isoformat(),
-                    m.get("content", "")
-                ])
+
+        # Fetch and append
+        msgs = fetch_messages(chan, after_ms)
+        for m in msgs:
+            ts = datetime.fromisoformat(m["timestamp"].replace("Z", "+00:00"))
+            ws.append_row([
+                chan,
+                m["id"],
+                m["author"]["username"],
+                ts.isoformat(),
+                m.get("content", "")
+            ])
 
 
 if __name__ == "__main__":
