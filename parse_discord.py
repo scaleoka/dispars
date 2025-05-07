@@ -23,7 +23,7 @@ WEEK_DAYS = int(os.getenv("WEEK_DAYS", "7"))
 SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
 GOOGLE_CREDS_JSON = os.getenv("GOOGLE_CREDS_JSON")
 
-# Discord API and headers
+# Discord API headers for Discum (via WebSocket) and REST fallback
 API_BASE = "https://discord.com/api/v9"
 HEADERS = {
     "Authorization": DISCORD_USER_TOKEN,
@@ -50,20 +50,23 @@ def get_sheets_client():
 def fetch_messages(bot, channel_id, cutoff_ms):
     all_msgs = []
     before = None
+    print(f"[DEBUG] Start fetching for channel {channel_id}, cutoff {cutoff_ms}")
     while True:
-        # getMessages signature: getMessages(channelID, num, before_message_id)
+        print(f"[DEBUG] Requesting messages before id={before}")
         chunk = bot.getMessages(channel_id, 100, before)
         if not chunk:
+            print(f"[DEBUG] No more messages returned for channel {channel_id}")
             break
+        print(f"[DEBUG] Retrieved chunk of size {len(chunk)}")
         for m in chunk:
-            # convert ISO timestamp to milliseconds
             ts = int(datetime.fromisoformat(m['timestamp'].replace('Z', '+00:00')).timestamp() * 1000)
             if ts < cutoff_ms:
+                print(f"[DEBUG] Message {m['id']} is before cutoff, stopping fetch.")
                 return all_msgs
             all_msgs.append(m)
-        # paginate: set before to last message ID
         before = chunk[-1]['id']
-        time.sleep(1)  # rate limit handling
+        time.sleep(1)
+    print(f"[DEBUG] Finished fetching channel {channel_id}, total msgs collected: {len(all_msgs)}")
     return all_msgs
 
 # Main function
@@ -76,13 +79,14 @@ def main():
     if not SHEET_ID:
         raise RuntimeError("GOOGLE_SHEET_ID env variable is not set.")
 
-    # Debug
-    print(f"Channels to parse ({len(CHANNEL_IDS)}): {CHANNEL_IDS}")
-    print("Google Sheet ID:", SHEET_ID)
-    print("Creds JSON length:", len(GOOGLE_CREDS_JSON or ""))
+    # Debug prints
+    print(f"[INFO] Channels to parse ({len(CHANNEL_IDS)}): {CHANNEL_IDS}")
+    print("[INFO] Google Sheet ID:", SHEET_ID)
+    print("[INFO] Creds JSON length:", len(GOOGLE_CREDS_JSON or ""))
 
     # Compute cutoff timestamp
     cutoff_ms = int((datetime.utcnow() - timedelta(days=WEEK_DAYS)).timestamp() * 1000)
+    print(f"[INFO] Messages cutoff (ms since epoch): {cutoff_ms}")
 
     # Initialize Discum client
     bot = discum.Client(token=DISCORD_USER_TOKEN, log=False)
@@ -93,19 +97,21 @@ def main():
 
     # Process each channel
     for channel in CHANNEL_IDS:
-        # Worksheet title: last 50 chars of channel ID if too long
+        # Worksheet title
         title = channel[-50:] if len(channel) > 50 else channel
+        print(f"[INFO] Processing channel sheet '{title}'")
         try:
             ws = spreadsheet.worksheet(title)
             ws.clear()
         except gspread.exceptions.WorksheetNotFound:
             ws = spreadsheet.add_worksheet(title=title, rows="1000", cols="5")
 
-        # Header
+        # Write header
         ws.append_row(["channel_id", "message_id", "author", "timestamp", "content"])
 
         # Fetch and write messages
         msgs = fetch_messages(bot, channel, cutoff_ms)
+        print(f"[INFO] Fetched {len(msgs)} messages for channel {channel}")
         for m in msgs:
             ts = datetime.fromisoformat(m['timestamp'].replace('Z', '+00:00'))
             ws.append_row([
@@ -116,7 +122,7 @@ def main():
                 m.get('content', '')
             ])
 
-    # Close gateway
+    # Close Discum gateway
     bot.gateway.close()
 
 if __name__ == '__main__':
