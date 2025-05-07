@@ -62,6 +62,10 @@ def main():
     if not SHEET_ID:
         raise RuntimeError("GOOGLE_SHEET_ID env variable is not set.")
 
+    # Debug output
+    print("Using SHEET_ID:", SHEET_ID)
+    print("CREDS JSON length:", len(GOOGLE_CREDS_JSON or ""))
+
     now = datetime.utcnow()
     start = now - timedelta(days=WEEK_DAYS)
     after_ms = int(start.timestamp() * 1000)
@@ -71,7 +75,6 @@ def main():
 
     # For each channel, create/clear its own sheet and append messages
     for chan in CHANNEL_IDS:
-        # Use channel ID as sheet name
         title = chan
         try:
             ws = spreadsheet.worksheet(title)
@@ -79,10 +82,7 @@ def main():
         except gspread.exceptions.WorksheetNotFound:
             ws = spreadsheet.add_worksheet(title=title, rows="1000", cols="5")
 
-        # Header row
         ws.append_row(["channel_id", "message_id", "author", "timestamp", "content"])
-
-        # Fetch and append
         msgs = fetch_messages(chan, after_ms)
         for m in msgs:
             ts = datetime.fromisoformat(m["timestamp"].replace("Z", "+00:00"))
