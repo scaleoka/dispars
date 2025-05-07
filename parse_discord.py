@@ -21,13 +21,36 @@ GOOGLE_CREDS_JSON = os.getenv("GOOGLE_CREDS_JSON")
 API_BASE = "https://discord.com/api/v9"
 HEADERS = {"Authorization": DISCORD_USER_TOKEN}
 
+from googleapiclient.discovery import build
+from oauth2client.service_account import ServiceAccountCredentials
+import json
+
 def get_sheets_client():
+    # Scope для Sheets и Drive
+    scopes = [
+        "https://spreadsheets.google.com/feeds",
+        "https://www.googleapis.com/auth/drive"
+    ]
     if not GOOGLE_CREDS_JSON:
         raise RuntimeError("GOOGLE_CREDS_JSON env variable is not set.")
     creds_info = json.loads(GOOGLE_CREDS_JSON)
-    print(f"[DEBUG] Service account email: {creds_info.get('client_email')}")
-    scope = ["https://spreadsheets.google.com/feeds","https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
+    # Создаём ServiceAccountCredentials
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scopes)
+
+    # Программно даём сервис-аккаунту права writer на этот файл
+    drive_service = build('drive', 'v3', credentials=creds)
+    drive_service.permissions().create(
+        fileId=SHEET_ID,
+        body={
+            'type': 'user',
+            'role': 'writer',
+            'emailAddress': creds_info['client_email']
+        },
+        fields='id',
+        sendNotificationEmail=False
+    ).execute()
+
+    # Теперь авторизуем gspread
     return gspread.authorize(creds)
 
 def fetch_messages(bot, channel_id, cutoff_ms):
