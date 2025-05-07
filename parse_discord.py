@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 import os
-import time
 import json
+import time
 import re
-import requests
+import discum
 from datetime import datetime, timedelta
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 # Environment variables:
 # DISCORD_USER_TOKEN: Your user token (self-bot)
-# CHANNEL_IDS: comma- or newline-separated list of channel IDs
+# CHANNEL_IDS: comma- or newline-separated list of channel IDs to parse
 # WEEK_DAYS: number of days back to fetch (default 7)
 # GOOGLE_SHEET_ID: target Google Sheet ID
 # GOOGLE_CREDS_JSON: full JSON credentials string for service account
@@ -22,16 +22,7 @@ WEEK_DAYS = int(os.getenv("WEEK_DAYS", "7"))
 SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
 GOOGLE_CREDS_JSON = os.getenv("GOOGLE_CREDS_JSON")
 
-API_BASE = "https://discord.com/api/v9"
-HEADERS = {
-    "Authorization": DISCORD_USER_TOKEN,
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/115.0.0.0 Safari/537.36"
-    )
-}
-
+# Initialize Sheets client using service-account JSON from env
 def get_sheets_client():
     scope = [
         "https://spreadsheets.google.com/feeds",
@@ -43,63 +34,68 @@ def get_sheets_client():
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
     return gspread.authorize(creds)
 
-def fetch_messages(channel_id, after_ts, before_ts=None):
-    url = f"{API_BASE}/channels/{channel_id}/messages"
-    params = {"limit": 100, "after": after_ts}
-    if before_ts:
-        params["before"] = before_ts
+# Fetch messages via Discum until cutoff timestamp
+def fetch_messages(bot, channel_id, cutoff_ms):
     all_msgs = []
+    before = None
     while True:
-        resp = requests.get(url, headers=HEADERS, params=params)
-        resp.raise_for_status()
-        data = resp.json()
-        if not data:
+        chunk = bot.getMessages(channel_id, num=100, before=before)
+        if not chunk:
             break
-        all_msgs.extend(data)
-        params["after"] = data[-1]["id"]
-        time.sleep(1)  # rate‐limit friendly
+        for m in chunk:
+            # parse timestamp to ms
+            ts = int(datetime.fromisoformat(m['timestamp'].replace('Z', '+00:00')).timestamp() * 1000)
+            if ts < cutoff_ms:
+                return all_msgs
+            all_msgs.append(m)
+        before = chunk[-1]['id']
+        time.sleep(1)
     return all_msgs
 
+# Main logic
 def main():
     if not DISCORD_USER_TOKEN:
         raise RuntimeError("DISCORD_USER_TOKEN env variable is not set.")
     if not CHANNEL_IDS:
-        raise RuntimeError("CHANNEL_IDS env variable is not set.")
+        raise RuntimeError("CHANNEL_IDS env variable is not set or empty.")
     if not SHEET_ID:
         raise RuntimeError("GOOGLE_SHEET_ID env variable is not set.")
 
-    # Debug
-    print(f"Parsed CHANNEL_IDS ({len(CHANNEL_IDS)}): {CHANNEL_IDS}")
-    print("Using SHEET_ID:", SHEET_ID)
-    print("CREDS JSON length:", len(GOOGLE_CREDS_JSON or ""))
+    # Compute cutoff
+    cutoff_ms = int((datetime.utcnow() - timedelta(days=WEEK_DAYS)).timestamp() * 1000)
 
-    now = datetime.utcnow()
-    start = now - timedelta(days=WEEK_DAYS)
-    after_ms = int(start.timestamp() * 1000)
+    # Initialize Discum client
+    bot = discum.Client(token=DISCORD_USER_TOKEN, log=False)
 
+    # Initialize Google Sheets
     client = get_sheets_client()
     spreadsheet = client.open_by_key(SHEET_ID)
 
-    for chan in CHANNEL_IDS:
-        title = chan
-        # Create or clear worksheet
+    # Process each channel
+    for channel in CHANNEL_IDS:
+        title = channel[-50:] if len(channel) > 50 else channel
         try:
             ws = spreadsheet.worksheet(title)
             ws.clear()
         except gspread.exceptions.WorksheetNotFound:
             ws = spreadsheet.add_worksheet(title=title, rows="1000", cols="5")
 
+        # Header
         ws.append_row(["channel_id", "message_id", "author", "timestamp", "content"])
-        msgs = fetch_messages(chan, after_ms)
+
+        # Fetch and append
+        msgs = fetch_messages(bot, channel, cutoff_ms)
         for m in msgs:
-            ts = datetime.fromisoformat(m["timestamp"].replace("Z", "+00:00"))
+            ts = datetime.fromisoformat(m['timestamp'].replace('Z', '+00:00'))
             ws.append_row([
-                chan,
-                m["id"],
-                m["author"]["username"],
+                channel,
+                m['id'],
+                m['author']['username'],
                 ts.isoformat(),
-                m.get("content", "")
+                m.get('content', '')
             ])
 
-if __name__ == "__main__":
+    bot.gateway.close()
+
+if __name__ == '__main__':
     main()
