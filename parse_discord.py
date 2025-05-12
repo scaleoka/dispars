@@ -1,91 +1,62 @@
 #!/usr/bin/env python3
-import os
-import json
-import re
-import time
+import os, json, asyncio
 from datetime import datetime, timedelta
 
+import discord
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from playwright.sync_api import sync_playwright
 
-# Environment variables
-TOKEN = os.getenv("DISCORD_USER_TOKEN")
-GUILD_ID = os.getenv("GUILD_ID")
-CHANNEL_IDS = [c for c in re.split(r"[\s,]+", os.getenv("CHANNEL_IDS", "")) if c]
-WEEK_DAYS = int(os.getenv("WEEK_DAYS", "7"))
-SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
-CREDS_JSON = os.getenv("GOOGLE_CREDS_JSON")
+# ─── Environment ───────────────────────────────────────────────
+BOT_TOKEN         = os.getenv("DISCORD_BOT_TOKEN")
+CHANNEL_IDS       = [c for c in os.getenv("CHANNEL_IDS","").split(",") if c]
+WEEK_DAYS         = int(os.getenv("WEEK_DAYS","7"))
+GOOGLE_SHEET_ID   = os.getenv("GOOGLE_SHEET_ID")
+GOOGLE_CREDS_JSON = os.getenv("GOOGLE_CREDS_JSON")
+# ────────────────────────────────────────────────────────────────
 
 def get_sheets_client():
-    creds_info = json.loads(CREDS_JSON)
-    scopes = [
+    creds_info = json.loads(GOOGLE_CREDS_JSON)
+    scope = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive"
     ]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scopes)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
     return gspread.authorize(creds)
 
-def on_response(response, channel_id, cutoff_ms, collector):
-    url = response.url
-    if f"/api/v9/channels/{channel_id}/messages" not in url:
-        return
-    try:
-        data = response.json()
-    except:
-        return
-    for m in data:
-        ts = int(datetime.fromisoformat(m["timestamp"].replace("Z", "+00:00")).timestamp() * 1000)
-        if ts < cutoff_ms:
-            return
-        collector.append(m)
+async def fetch_and_write():
+    cutoff = datetime.utcnow() - timedelta(days=WEEK_DAYS)
+    sheet = get_sheets_client().open_by_key(GOOGLE_SHEET_ID)
+    # запрашиваем привилегированный интент
+    intents = discord.Intents.default()
+    intents.messages = True
+    intents.message_content = True
 
-def main():
-    cutoff_ms = int((datetime.utcnow() - timedelta(days=WEEK_DAYS)).timestamp() * 1000)
-    sheets_client = get_sheets_client()
-    spreadsheet = sheets_client.open_by_key(SHEET_ID)
+    client = discord.Client(intents=intents)
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        # Inject token before any scripts run
-        page.add_init_script(f"() => {{ window.localStorage.setItem('token', '{TOKEN}'); }}")
-
-        for chan in CHANNEL_IDS:
-            collected = []
-            print(f"[INFO] Scraping channel {chan} ...")
-            page.on("response", lambda resp: on_response(resp, chan, cutoff_ms, collected))
-            page.goto(f"https://discord.com/channels/{GUILD_ID}/{chan}")
-
-            last_scroll = None
-            while True:
-                page.keyboard.press("PageUp")
-                time.sleep(0.3)
-                scroll = page.evaluate("document.scrollingElement.scrollTop")
-                if scroll == last_scroll:
-                    break
-                last_scroll = scroll
-
-            print(f"[INFO] Collected {len(collected)} messages for {chan}")
-
-            # Write to Google Sheets
+    @client.event
+    async def on_ready():
+        for chan_id in CHANNEL_IDS:
+            channel = client.get_channel(int(chan_id))
+            # создаём или очищаем страницу
             try:
-                ws = spreadsheet.worksheet(chan)
+                ws = sheet.worksheet(chan_id)
                 ws.clear()
             except gspread.exceptions.WorksheetNotFound:
-                ws = spreadsheet.add_worksheet(title=chan, rows="1000", cols="5")
-            ws.append_row(["channel_id", "message_id", "author", "timestamp", "content"])
-            for m in collected:
-                ts = datetime.fromisoformat(m["timestamp"].replace("Z", "+00:00"))
+                ws = sheet.add_worksheet(title=chan_id, rows="1000", cols="5")
+            ws.append_row(["channel_id","message_id","author","timestamp","content"])
+            # вытаскиваем историю
+            msgs = await channel.history(after=cutoff, oldest_first=True, limit=None).flatten()
+            for m in msgs:
                 ws.append_row([
-                    chan,
-                    m["id"],
-                    m["author"]["username"],
-                    ts.isoformat(),
-                    m.get("content", "")
+                    chan_id,
+                    m.id,
+                    m.author.name,
+                    m.created_at.isoformat(),
+                    m.content
                 ])
+        await client.close()
 
-        browser.close()
+    await client.start(BOT_TOKEN)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(fetch_and_write())
