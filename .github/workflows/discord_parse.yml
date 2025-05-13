@@ -4,7 +4,7 @@ name: Archive Discord via LevelDB
 on:
   schedule:
     - cron: '0 0 * * 0'    # каждое воскресенье в 00:00 UTC
-  workflow_dispatch: {}   # ручной запуск из UI
+  workflow_dispatch: {}   # ручной запуск
 
 jobs:
   archive:
@@ -24,9 +24,8 @@ jobs:
           pip install plyvel gspread oauth2client
 
       - name: Write Google credentials
-        # создаём файл creds.json на лету из секрета
         run: |
-          echo "${{ secrets.GOOGLE_CREDS_JSON }}" > creds.json
+          printf '%s\n' "${{ secrets.GOOGLE_CREDS_JSON }}" > creds.json
 
       - name: Run LevelDB parser
         env:
