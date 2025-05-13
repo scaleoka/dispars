@@ -3,16 +3,14 @@ name: Archive Discord via LevelDB
 
 on:
   schedule:
-    - cron: '0 0 * * 0'    # каждое воскресенье в 00:00 UTC
+    - cron: '0 0 * * 0'    # каждое воскресенье 00:00 UTC
   workflow_dispatch: {}   # ручной запуск
 
 jobs:
   archive:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -23,11 +21,8 @@ jobs:
         run: |
           pip install plyvel gspread oauth2client
 
-      - name: Write Google credentials
-        run: |
-          printf '%s\n' "${{ secrets.GOOGLE_CREDS_JSON }}" > creds.json
-
       - name: Run LevelDB parser
         env:
-          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_SHEET_ID:   ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_CREDS_JSON: ${{ secrets.GOOGLE_CREDS_JSON }}
         run: python parse_leveldb.py
