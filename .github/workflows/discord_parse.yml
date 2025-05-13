@@ -1,4 +1,4 @@
-name: Parse Discord Messages (Bot)
+name: Parse Discord Messages
 
 on:
   schedule:
