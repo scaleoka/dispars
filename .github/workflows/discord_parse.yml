@@ -1,12 +1,12 @@
-name: Parse Discord Messages
+name: Archive Discord via LevelDB
 
 on:
   schedule:
-    - cron: '0 0 * * 0'    # по воскресеньям в полночь UTC
-  workflow_dispatch: {}   # ручной запуск
+    - cron: '0 0 * * 0'
+  workflow_dispatch: {}
 
 jobs:
-  parse:
+  archive:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -18,13 +18,14 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install discum plyvel gspread oauth2client requests
+          pip install plyvel gspread oauth2client
 
-      - name: Run Discord parser
+      # ← Здесь разворачиваем JSON-строку в файл creds.json
+      - name: Write Google creds to file
+        run: |
+          echo "${{ secrets.GOOGLE_CREDS_JSON }}" > creds.json
+
+      - name: Run LevelDB parser
         env:
-          DISCORD_USER_TOKEN: ${{ secrets.DISCORD_USER_TOKEN }}
-          CHANNEL_IDS:        ${{ secrets.CHANNEL_IDS }}
-          WEEK_DAYS:          '7'
-          GOOGLE_SHEET_ID:    ${{ secrets.GOOGLE_SHEET_ID }}
-          GOOGLE_CREDS_JSON:  ${{ secrets.GOOGLE_CREDS_JSON }}
+          GOOGLE_SHEET_ID:   ${{ secrets.GOOGLE_SHEET_ID }}
         run: python parse_discord.py
