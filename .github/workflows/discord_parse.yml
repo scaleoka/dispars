@@ -2,7 +2,7 @@ name: Parse Discord Messages (Bot)
 
 on:
   schedule:
-    - cron: '0 0 * * 0'    # по воскресеньям
+    - cron: '0 0 * * 0'    # по воскресеньям в полночь UTC
   workflow_dispatch: {}   # ручной запуск
 
 jobs:
@@ -18,7 +18,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install discord.py gspread oauth2client
+          pip install discum gspread oauth2client requests
 
       - name: Run Discord parser
         env:
