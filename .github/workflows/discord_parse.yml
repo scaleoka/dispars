@@ -22,9 +22,9 @@ jobs:
 
       - name: Run Discord parser
         env:
-          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-          CHANNEL_IDS:       ${{ secrets.CHANNEL_IDS }}
-          WEEK_DAYS:         '7'
-          GOOGLE_SHEET_ID:   ${{ secrets.GOOGLE_SHEET_ID }}
-          GOOGLE_CREDS_JSON: ${{ secrets.GOOGLE_CREDS_JSON }}
-        run: python parse_discord_bot.py
+          DISCORD_USER_TOKEN: ${{ secrets.DISCORD_USER_TOKEN }}
+          CHANNEL_IDS:        ${{ secrets.CHANNEL_IDS }}
+          WEEK_DAYS:          '7'
+          GOOGLE_SHEET_ID:    ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_CREDS_JSON:  ${{ secrets.GOOGLE_CREDS_JSON }}
+        run: python parse_discord.py
