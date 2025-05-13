@@ -1,6 +1,4 @@
-playwright
+discum
 gspread
 oauth2client
 requests
-json
-discum
