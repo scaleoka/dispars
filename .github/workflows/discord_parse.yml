@@ -18,7 +18,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install discum gspread oauth2client requests
+          pip install discum plyvel gspread oauth2client requests
 
       - name: Run Discord parser
         env:
