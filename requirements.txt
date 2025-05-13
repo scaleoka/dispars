@@ -2,3 +2,5 @@ playwright
 gspread
 oauth2client
 requests
+json
+discum
