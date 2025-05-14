@@ -20,7 +20,7 @@ jobs:
 
       - name: Install DiscordChatExporter
         run: |
-          dotnet tool install --global DiscordChatExporter.Console --version 3.*
+          dotnet tool install --global DiscordChatExporter.Cli --version 2.44.*
           echo "DOTNET_ROOT=$(dirname $(dirname $(which dotnet)))" >> $GITHUB_ENV
           echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
 
