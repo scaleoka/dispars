@@ -25,12 +25,11 @@ jobs:
 
       - name: Export channels
         env:
-          DC_TOKEN: ${{ secrets.DISCORD_USER_TOKEN }}  # используем токен бота
+          DC_TOKEN: ${{ secrets.DISCORD_USER_TOKEN }}
         run: |
           mkdir -p exports
           for CHANNEL in 1349119225868058644 1349121405903573114; do
-            DiscordChatExporter.Cli export \\
-              --output exports/channel-$CHANNEL.json
+            DiscordChatExporter.Cli export --token "$DC_TOKEN" --channel $CHANNEL --format Json --output exports/channel-$CHANNEL.json
           done
 
       - name: Run Python parser
