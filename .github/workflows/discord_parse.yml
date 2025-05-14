@@ -26,7 +26,7 @@ jobs:
 
       - name: Export channels
         env:
-          DC_TOKEN: ${{ secrets.DISCORD_USER_TOKEN }}  # используем существующий секрет DISCORD_USER_TOKEN  # добавьте секрет в Settings → Secrets
+          DC_TOKEN: ${{ secrets.DISCORD_USER_TOKEN }}  # используем существующий секрет
         run: |
           mkdir -p exports
           for CHANNEL in 1349119225868058644 1349121405903573114; do
@@ -36,6 +36,15 @@ jobs:
               --format Json \
               --output exports/channel-$CHANNEL.json
           done
+
+      - name: Run Python parser
+        env:
+          DC_TOKEN:          ${{ secrets.DISCORD_USER_TOKEN }}
+          GOOGLE_CREDS_JSON: ${{ secrets.GOOGLE_CREDS_JSON }}
+          GOOGLE_SHEET_ID:   ${{ secrets.GOOGLE_SHEET_ID }}
+        run: |
+          pip install plyvel gspread oauth2client
+          python parse_leveldb.py
 
       - name: Commit and push exports
         run: |
