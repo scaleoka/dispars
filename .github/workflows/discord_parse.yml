@@ -1,3 +1,4 @@
+# .github/workflows/discord-export.yml
 name: Discord Export
 
 on:
@@ -13,24 +14,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: '6.0.x'
-
-      - name: Install DiscordChatExporter
+      - name: Download DiscordChatExporter CLI
         run: |
-          dotnet tool install --global DiscordChatExporter.Cli --version 2.44.*
-          echo "DOTNET_ROOT=$(dirname $(dirname $(which dotnet)))" >> $GITHUB_ENV
-          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+          VERSION="2.44.2"
+          ASSET="DiscordChatExporter.Cli.linux-x64.zip"
+          wget -qO "$ASSET" \
+            "https://github.com/Tyrrrz/DiscordChatExporter/releases/download/$VERSION/$ASSET"
+          unzip -q "$ASSET" -d discord-exporter
+          chmod +x discord-exporter/DiscordChatExporter.Cli
+          echo "$PWD/discord-exporter" >> $GITHUB_PATH
 
       - name: Export channels
         env:
-          DC_TOKEN: ${{ secrets.DISCORD_USER_TOKEN }}  # используем существующий секрет
+          DC_TOKEN: ${{ secrets.DISCORD_USER_TOKEN }}
         run: |
           mkdir -p exports
           for CHANNEL in 1349119225868058644 1349121405903573114; do
-            DiscordChatExporter export \
+            DiscordChatExporter.Cli \
+              export \
               --token "$DC_TOKEN" \
               --channel $CHANNEL \
               --format Json \
@@ -39,9 +40,9 @@ jobs:
 
       - name: Run Python parser
         env:
-          DC_TOKEN:          ${{ secrets.DISCORD_USER_TOKEN }}
-          GOOGLE_CREDS_JSON: ${{ secrets.GOOGLE_CREDS_JSON }}
-          GOOGLE_SHEET_ID:   ${{ secrets.GOOGLE_SHEET_ID }}
+          DISCORD_USER_TOKEN:  ${{ secrets.DISCORD_USER_TOKEN }}
+          GOOGLE_CREDS_JSON:   ${{ secrets.GOOGLE_CREDS_JSON }}
+          GOOGLE_SHEET_ID:     ${{ secrets.GOOGLE_SHEET_ID }}
         run: |
           pip install plyvel gspread oauth2client
           python parse_leveldb.py
