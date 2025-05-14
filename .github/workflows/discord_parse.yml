@@ -1,28 +1,48 @@
-# .github/workflows/archive_leveldb.yml
-name: Archive Discord via LevelDB
+name: Discord Export
 
 on:
+  workflow_dispatch:
   schedule:
-    - cron: '0 0 * * 0'    # каждое воскресенье 00:00 UTC
-  workflow_dispatch: {}   # ручной запуск
+    - cron: '0 0 * * *'  # каждый день в полночь UTC
 
 jobs:
-  archive:
+  export:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v3
         with:
-          python-version: '3.10'
+          dotnet-version: '6.0.x'
 
-      - name: Install dependencies
+      - name: Install DiscordChatExporter
         run: |
-          pip install plyvel gspread oauth2client
+          dotnet tool install --global DiscordChatExporter.Console --version 3.*
+          echo "DOTNET_ROOT=$(dirname $(dirname $(which dotnet)))" >> $GITHUB_ENV
+          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
 
-      - name: Run LevelDB parser
+      - name: Export channels
         env:
-          GOOGLE_SHEET_ID:   ${{ secrets.GOOGLE_SHEET_ID }}
-          GOOGLE_CREDS_JSON: ${{ secrets.GOOGLE_CREDS_JSON }}
-        run: python parse_leveldb.py
+          DC_TOKEN: ${{ secrets.DISCORD_TOKEN }}  # добавьте секрет в Settings → Secrets
+        run: |
+          mkdir -p exports
+          for CHANNEL in 1349119225868058644 1349121405903573114; do
+            DiscordChatExporter export \
+              --token "$DC_TOKEN" \
+              --channel $CHANNEL \
+              --format Json \
+              --output exports/channel-$CHANNEL.json
+          done
+
+      - name: Commit and push exports
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add exports/
+          git commit -m "Automated Discord export"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
