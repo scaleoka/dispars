@@ -29,11 +29,7 @@ jobs:
         run: |
           mkdir -p exports
           for CHANNEL in 1349119225868058644 1349121405903573114; do
-            DiscordChatExporter.Cli export \
-              --bot \
-              --token "$DC_TOKEN" \
-              --channel $CHANNEL \
-              --format Json \
+            DiscordChatExporter.Cli export \\
               --output exports/channel-$CHANNEL.json
           done
 
