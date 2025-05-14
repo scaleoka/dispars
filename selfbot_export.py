@@ -61,7 +61,8 @@ async def fetch_and_sheet():
         print("[INFO] Done writing to Google Sheets.")
         await client.close()
 
-    await client.start(USER_TOKEN, bot=False)
+    # Запуск клиента в режиме user (self‑bot)
+    await client.start(USER_TOKEN)
 
 if __name__ == "__main__":
     asyncio.run(fetch_and_sheet())
