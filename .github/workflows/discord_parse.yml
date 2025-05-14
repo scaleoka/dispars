@@ -26,7 +26,7 @@ jobs:
 
       - name: Export channels
         env:
-          DC_TOKEN: ${{ secrets.DISCORD_TOKEN }}  # добавьте секрет в Settings → Secrets
+          DC_TOKEN: ${{ secrets.DISCORD_USER_TOKEN }}  # используем существующий секрет DISCORD_USER_TOKEN  # добавьте секрет в Settings → Secrets
         run: |
           mkdir -p exports
           for CHANNEL in 1349119225868058644 1349121405903573114; do
