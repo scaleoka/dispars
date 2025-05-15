@@ -78,8 +78,7 @@ async def fetch_and_sheet():
                         str(cid), name, num,
                         str(msg.id), msg.author.name,
                         msg.created_at.isoformat(),
-                        msg.content.replace("
-", " ")
+                        msg.content.replace("\n", " ")
                     ])
             except Exception as e:
                 print(f"[ERROR] Could not read history for {cid}: {e}")
