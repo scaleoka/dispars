@@ -64,9 +64,11 @@ async def fetch_and_sheet():
                 continue
 
             name = getattr(channel, 'name', '')
+            # номер подсети: берём часть после последнего '・'
+            parts = name.split('・')
             try:
-                num = int(name.split('-')[-1])
-            except:
+                num = int(parts[-1])
+            except (ValueError, IndexError):
                 num = ''
 
             count_this = 0
@@ -87,7 +89,6 @@ async def fetch_and_sheet():
             print(f"[DEBUG] Collected {count_this} messages for channel {cid}")
 
         if all_rows:
-            # batch write to reduce quota
             print(f"[DEBUG] Writing {len(all_rows)} rows to sheet in batch...")
             ws.append_rows(all_rows, value_input_option='RAW')
 
