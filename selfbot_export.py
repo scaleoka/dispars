@@ -9,10 +9,17 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 # === Настройки ===
-CHANNEL_IDS = [
-    1349119225868058644,
-    1349121405903573114
-]
+DB_PATH     = os.path.join(os.getcwd(), "leveldb")
+# Список ID каналов: задаётся через секрет CHANNEL_IDS_JSON (формат JSON-массив или CSV)
+raw_ids    = os.environ.get("CHANNEL_IDS", "")
+if raw_ids:
+    try:
+        CHANNEL_IDS = json.loads(raw_ids)
+    except json.JSONDecodeError:
+        CHANNEL_IDS = [int(x) for x in raw_ids.split(",") if x]
+else:
+    CHANNEL_IDS = []
+
 WEEK_DAYS    = 7
 SHEET_ID     = os.environ["GOOGLE_SHEET_ID"]
 CREDS_JSON   = os.environ["GOOGLE_CREDS_JSON"]
