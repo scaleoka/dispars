@@ -3,17 +3,16 @@ import os
 import json
 import re
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 import openai
 import gspread
 
-# --- Constants ---
-DISCORD_EPOCH = 1420070400000  # milliseconds for Discord snowflake parsing
+DISCORD_EPOCH = 1420070400000
 
-# --- Environment & Authentication ---
+# --- Авторизация ---
 creds_json = os.environ.get('GOOGLE_CREDS_JSON')
 if not creds_json:
-    raise RuntimeError('GOOGLE_CREDS_JSON environment variable is missing')
+    raise RuntimeError('GOOGLE_CREDS_JSON is missing')
 creds_dict = json.loads(creds_json)
 gc = gspread.service_account_from_dict(creds_dict)
 
@@ -23,7 +22,7 @@ dst_key = os.environ.get('DST_SHEET_ID')
 if not src_key or not dst_key:
     raise RuntimeError('SRC_SHEET_ID and DST_SHEET_ID are required')
 
-# --- Date parsing ---
+# --- Разбор временных меток ---
 def parse_date(ts: str) -> str:
     try:
         return datetime.fromisoformat(ts).strftime('%d.%m.%Y')
@@ -36,12 +35,12 @@ def parse_date(ts: str) -> str:
                 return datetime.fromtimestamp(ms / 1000.0).strftime('%d.%m.%Y')
     return datetime.now().strftime('%d.%m.%Y')
 
-# --- OpenAI logic ---
+# --- OpenAI-анализ ---
 def analyze_with_openai(messages: list[str]) -> str:
     system_prompt = (
         "Ты классифицируешь список сообщений. Верни строго JSON-объект с ключами "
         "'problems', 'updates', 'plans'. Тексты внутри массивов должны быть на русском языке, "
-        "короткими фразами. Никаких ```json или markdown — только JSON."
+        "короткими фразами. Никаких markdown или ```json."
     )
     user_prompt = "\n".join(messages)
     response = openai.chat.completions.create(
@@ -54,7 +53,6 @@ def analyze_with_openai(messages: list[str]) -> str:
     )
     raw = response.choices[0].message.content.strip()
 
-    # --- clean up JSON block ---
     if raw.lower().startswith("json"):
         raw = raw[raw.find("{"):]
     if raw.startswith("```") and raw.endswith("```"):
@@ -69,15 +67,20 @@ def analyze_with_openai(messages: list[str]) -> str:
     except json.JSONDecodeError:
         return raw.replace("\n", " ")[:500]
 
-    # --- format result ---
     result = []
     result.append("🛑 " + "; ".join(data.get("problems", [])) if data.get("problems") else "🛑 —")
     result.append("🔄 " + "; ".join(data.get("updates", [])) if data.get("updates") else "🔄 —")
     result.append("🚀 " + "; ".join(data.get("plans", [])) if data.get("plans") else "🚀 —")
     return "   ".join(result)
 
-# --- Main ---
+# --- Основной процесс ---
 def main():
+    # дата вчера
+    yesterday = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
+    target_date = yesterday.strftime('%d.%m.%Y')
+    print(f"DEBUG: Filtering for date {target_date}")
+
+    # читаем таблицу-источник
     sh_src = gc.open_by_key(src_key)
     sheet_src = sh_src.worksheet('archive')
     rows = sheet_src.get_all_values()
@@ -90,13 +93,10 @@ def main():
     except ValueError as e:
         raise RuntimeError(f"Column missing: {e}")
 
-    today_str = datetime.now().strftime('%d.%m.%Y')
-    print(f"DEBUG: Filtering for {today_str}")
-
     groups = defaultdict(list)
     for row in rows[1:]:
         date = parse_date(row[ts_idx])
-        if date == today_str:
+        if date == target_date:
             subnet = str(row[id_idx])
             msg = row[msg_idx]
             groups[subnet].append(msg)
@@ -108,13 +108,14 @@ def main():
         print(f"DEBUG: Analyzing subnet {subnet}")
         summaries[subnet] = analyze_with_openai(msgs)
 
-    # Write back
+    # запись в другую таблицу
     sh_dst = gc.open_by_key(dst_key)
     sheet_dst = sh_dst.worksheet('Dis и выводы')
     header_dst = sheet_dst.row_values(1)
-    if today_str not in header_dst:
-        raise RuntimeError(f"Date {today_str} not found in header row")
-    col_idx = header_dst.index(today_str) + 1
+    if target_date not in header_dst:
+        raise RuntimeError(f"Date {target_date} not found in header row")
+    col_idx = header_dst.index(target_date) + 1
+    print(f"DEBUG: Writing to column {col_idx} ({target_date})")
 
     netids = sheet_dst.col_values(1)[1:]
     for subnet, result in summaries.items():
