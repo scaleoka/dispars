@@ -111,7 +111,7 @@ for subnet, msgs in groups.items():
 
 # --- Write results into destination sheet ---
 sh_dst = gc.open_by_key(dst_key)
-sheet_dst = sh_dst.worksheet('DIs и выводы')
+sheet_dst = sh_dst.worksheet('Dis и выводы')
 
 # Find or add today's column
 header_dst = sheet_dst.row_values(1)
