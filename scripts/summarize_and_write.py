@@ -53,50 +53,62 @@ def parse_date(ts: str) -> str:
 
 def analyze_with_openai(messages: list[str]) -> str:
     """
-    Send messages list to OpenAI Chat API to classify into three categories.
-    Returns a concise summary string with emojis.
+    Send messages list to OpenAI Chat API to classify into three categories
+    and return a concise Russian summary string with emojis.
     """
     system_prompt = (
         "Верни строго JSON-объект с ключами 'problems', 'updates', 'plans'. "
-        "Каждое значение — массив коротких строк."
+        "Тексты внутри массивов напиши на русском языке короткими фразами."
     )
     user_prompt = "\n".join(messages)
+
+    # вызов нового API
     response = openai.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
+            {"role": "system",  "content": system_prompt},
+            {"role": "user",    "content": user_prompt}
         ],
         temperature=0
     )
     content = response.choices[0].message.content.strip()
-    # Remove code fences if present
+
+    # strip leading "json" if present
+    if content.lower().startswith("json"):
+        idx = content.find("{")
+        if idx != -1:
+            content = content[idx:]
+
+    # remove code fences
     if content.startswith("```") and content.endswith("```"):
-        content = content.strip('`')
+        content = content.strip("`")
+
+    # parse JSON
     try:
         data = json.loads(content)
     except json.JSONDecodeError:
-        text = content.replace('\n', ' ')
-        return text[:500]
+        # fallback: убираем переносы и обрезаем до 500 символов
+        return content.replace("\n", " ")[:500]
 
     parts = []
-    # Problems
-    if data.get('problems'):
-        parts.append('🛑 ' + '; '.join(data['problems']))
+    # Проблемы
+    if data.get("problems"):
+        parts.append("🛑 " + "; ".join(data["problems"]))
     else:
-        parts.append('🛑 —')
-    # Updates
-    if data.get('updates'):
-        parts.append('🔄 ' + '; '.join(data['updates']))
+        parts.append("🛑 —")
+    # Обновления
+    if data.get("updates"):
+        parts.append("🔄 " + "; ".join(data["updates"]))
     else:
-        parts.append('🔄 —')
-    # Plans
-    if data.get('plans'):
-        parts.append('🚀 ' + '; '.join(data['plans']))
+        parts.append("🔄 —")
+    # Планы
+    if data.get("plans"):
+        parts.append("🚀 " + "; ".join(data["plans"]))
     else:
-        parts.append('🚀 —')
-    # Join with three spaces
-    return '   '.join(parts)
+        parts.append("🚀 —")
+
+    # Объединяем через три пробела
+    return "   ".join(parts)
 
 
 def main():
