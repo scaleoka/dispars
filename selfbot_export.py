@@ -9,21 +9,17 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 # === Настройки ===
-DB_PATH     = os.path.join(os.getcwd(), "leveldb")
-# Список ID каналов: задаётся через секрет CHANNEL_IDS_JSON (формат JSON-массив или CSV)
-raw_ids    = os.environ.get("CHANNEL_IDS", "")
+# CHANNEL_IDS_JSON приходит как CSV через секрет: "id1,id2,id3"
+raw_ids = os.environ.get("CHANNEL_IDS", "")
 if raw_ids:
-    try:
-        CHANNEL_IDS = json.loads(raw_ids)
-    except json.JSONDecodeError:
-        CHANNEL_IDS = [int(x) for x in raw_ids.split(",") if x]
+    CHANNEL_IDS = [int(x.strip()) for x in raw_ids.split(",") if x.strip()]
 else:
     CHANNEL_IDS = []
 
-WEEK_DAYS    = 7
-SHEET_ID     = os.environ["GOOGLE_SHEET_ID"]
-CREDS_JSON   = os.environ["GOOGLE_CREDS_JSON"]
-USER_TOKEN   = os.environ["DISCORD_USER_TOKEN"]
+WEEK_DAYS  = 7
+SHEET_ID   = os.environ["GOOGLE_SHEET_ID"]
+CREDS_JSON = os.environ["GOOGLE_CREDS_JSON"]
+USER_TOKEN = os.environ["DISCORD_USER_TOKEN"]
 
 # Инициализация Google Sheets
 creds_info = json.loads(CREDS_JSON)
@@ -31,7 +27,9 @@ scope = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
 ]
-gs_client = gspread.authorize(ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope))
+gs_client = gspread.authorize(
+    ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
+)
 
 async def fetch_and_sheet():
     client = discord.Client()
@@ -46,33 +44,32 @@ async def fetch_and_sheet():
         except gspread.exceptions.WorksheetNotFound:
             ws = sheet.add_worksheet(title="archive", rows="2000", cols="7")
 
-        # Заголовок с именем и номером подсети
+        # Заголовок с каналом, именем и номером подсети
         ws.append_row([
             "channel_id", "channel_name", "subnet_number",
             "message_id", "author", "timestamp", "content"
         ])
 
         total = 0
-        # Сбор сообщений
         for cid in CHANNEL_IDS:
-            # Пытаемся получить канал из кеша, иначе вытаскиваем по API
-            channel = client.get_channel(cid)
-            if channel is None:
-                try:
-                    channel = await client.fetch_channel(cid)
-                except Exception as e:
-                    print(f"[ERROR] Cannot fetch channel {cid}: {e}")
-                    continue
+            print(f"[DEBUG] Trying channel {cid}...")
+            try:
+                channel = client.get_channel(cid) or await client.fetch_channel(cid)
+                print(f"[DEBUG] Resolved: {channel} (name={getattr(channel,'name',None)})")
+            except Exception as e:
+                print(f"[ERROR] Cannot resolve channel {cid}: {e}")
+                continue
 
             name = getattr(channel, 'name', '')
-            # номер подсети: последняя часть после дефиса
             try:
                 num = int(name.split('-')[-1])
             except:
                 num = ''
 
+            count_this = 0
             try:
                 async for msg in channel.history(limit=None, after=cutoff):
+                    count_this += 1
                     total += 1
                     ws.append_row([
                         str(cid), name, num,
@@ -81,13 +78,14 @@ async def fetch_and_sheet():
                         msg.content.replace("\n", " ")
                     ])
             except Exception as e:
-                print(f"[ERROR] Could not read history for {cid}: {e}")
+                print(f"[ERROR] Could not read history {cid}: {e}")
                 continue
+
+            print(f"[DEBUG] Fetched {count_this} messages for channel {cid}")
 
         print(f"[INFO] Found {total} messages in total.")
         await client.close()
 
-    # Запуск клиента в режиме user (self‑bot)
     await client.start(USER_TOKEN)
 
 if __name__ == "__main__":
