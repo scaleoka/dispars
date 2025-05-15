@@ -6,20 +6,46 @@ import openai
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
+# Discord epoch for Snowflake parsing
+DISCORD_EPOCH = 1420070400000  # milliseconds
+
 # --- Google Sheets authorization ---
 creds_json = os.environ['GOOGLE_CREDS_JSON']
 creds_dict = json.loads(creds_json)
-# Use from_json_keyfile_dict to load directly from dict
+# Load service account from dict
 gc = gspread.service_account_from_dict(creds_dict)
 
 # --- OpenAI API key ---
 openai.api_key = os.environ['OPENAI_API_KEY']
 
-# --- Parameters from environment ---
+# --- Parameters ---
 src_key = os.environ['SRC_SHEET_ID']
 dst_key = os.environ['DST_SHEET_ID']
 
-# --- Helper: analyze group of messages ---
+def parse_date(ts: str) -> str:
+    """
+    Parse timestamp string which may be ISO format, 'dd.MM.YYYY', or Discord snowflake ID.
+    Returns date formatted as 'dd.MM.YYYY'.
+    """
+    # Try ISO format
+    try:
+        dt = datetime.fromisoformat(ts)
+    except ValueError:
+        # Try dd.MM.YYYY
+        try:
+            dt = datetime.strptime(ts, '%d.%m.%Y')
+        except ValueError:
+            # Try Snowflake
+            if ts.isdigit():
+                snowflake = int(ts)
+                ms = (snowflake >> 22) + DISCORD_EPOCH
+                dt = datetime.fromtimestamp(ms / 1000.0)
+            else:
+                # Fallback to today
+                dt = datetime.now()
+    return dt.strftime('%d.%m.%Y')
+
+# --- Helper to analyze messages ---
 def analyze_with_openai(messages):
     system_prompt = (
         "Ты классифицируешь список сообщений по трём категориям: "
@@ -39,9 +65,7 @@ def analyze_with_openai(messages):
     try:
         data = json.loads(text)
     except json.JSONDecodeError:
-        # Если не JSON, просто возвращаем весь блок как one-string
         return text
-    # Format into markdown
     result = []
     if data.get('problems'):
         result.append('🛑 Проблемы:')
@@ -57,14 +81,12 @@ def analyze_with_openai(messages):
             result.append(f"- {item}")
     return "\n".join(result)
 
-# --- Read today's rows and group by subnet ---
+# --- Read and group messages by subnet for today ---
 sh_src = gc.open_by_key(src_key)
 sheet = sh_src.worksheet('archive')
 rows = sheet.get_all_values()
-
-# Assume header: ["timestamp", "subnet_id", "message"]
-# Adjust indices if needed
 header = rows[0]
+# Detect columns
 try:
     ts_idx = header.index('timestamp')
     id_idx = header.index('subnet_id')
@@ -76,28 +98,22 @@ groups = defaultdict(list)
 today_str = datetime.now().strftime('%d.%m.%Y')
 for row in rows[1:]:
     ts = row[ts_idx]
-    try:
-        date_part = datetime.fromisoformat(ts).strftime('%d.%m.%Y')
-    except ValueError:
-        date_part = datetime.strptime(ts, '%d.%m.%Y').strftime('%d.%m.%Y')
+    date_part = parse_date(ts)
     if date_part == today_str:
         subnet = str(row[id_idx])
         msg = row[msg_idx]
         groups[subnet].append(msg)
 
-# Analyze each group
+# Analyze each subnet
 by_subnet = {}
 for subnet, msgs in groups.items():
-    if msgs:
-        by_subnet[subnet] = analyze_with_openai(msgs)
-    else:
-        by_subnet[subnet] = '—'
+    by_subnet[subnet] = analyze_with_openai(msgs) if msgs else '—'
 
 # --- Write results into destination sheet ---
 sh_dst = gc.open_by_key(dst_key)
 sheet_dst = sh_dst.worksheet('DIs и выводы')
 
-# Find or create today's column
+# Find or add today's column
 header_dst = sheet_dst.row_values(1)
 if today_str in header_dst:
     col_idx = header_dst.index(today_str) + 1
@@ -106,7 +122,7 @@ else:
     col_idx = len(header_dst) + 1
     sheet_dst.update_cell(1, col_idx, today_str)
 
-# Map NetID rows
+# Map NetID rows and write summaries
 netids = sheet_dst.col_values(1)[1:]
 for subnet, summary in by_subnet.items():
     if subnet in netids:
