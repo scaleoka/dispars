@@ -9,7 +9,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 # === Настройки ===
-# CHANNEL_IDS_JSON приходит как CSV через секрет: "id1,id2,id3"
+# CHANNEL_IDS приходит как CSV "id1,id2,id3,..."
 raw_ids = os.environ.get("CHANNEL_IDS", "")
 if raw_ids:
     CHANNEL_IDS = [int(x.strip()) for x in raw_ids.split(",") if x.strip()]
@@ -36,6 +36,7 @@ async def fetch_and_sheet():
 
     @client.event
     async def on_ready():
+        print(f"[DEBUG] Parsed CHANNEL_IDS: {CHANNEL_IDS}")
         cutoff = datetime.utcnow() - timedelta(days=WEEK_DAYS)
         sheet = gs_client.open_by_key(SHEET_ID)
         try:
@@ -84,6 +85,8 @@ async def fetch_and_sheet():
             print(f"[DEBUG] Fetched {count_this} messages for channel {cid}")
 
         print(f"[INFO] Found {total} messages in total.")
+        # перед закрытием устанавливаем output для GitHub Actions
+        print(f"::set-output name=found::{total}")
         await client.close()
 
     await client.start(USER_TOKEN)
