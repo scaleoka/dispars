@@ -1,0 +1,32 @@
+name: Daily Subnet Summary
+
+on:
+  schedule:
+    - cron: '0 1 * * *'        # каждый день в 01:00 UTC
+  workflow_dispatch:
+
+jobs:
+  summarize:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Summarize and write to report sheet
+        env:
+          SRC_SHEET_ID: 18deC7WjmIkqZfg0RDtF_XoEM-TVnHdgUurazyAhl24Q
+          DST_SHEET_ID: 1vR3npH1Kgqu0IyXZnfx9vYauLPNl8kGjrkdCkA2R71o
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          python scripts/summarize_and_write.py
