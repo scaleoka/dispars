@@ -54,13 +54,14 @@ print(f"DEBUG: Today's date: {today_str}")
 # Detect columns
 try:
     ts_idx = header.index('timestamp')
-    id_idx = header.index('subnet_id')
-    msg_idx = header.index('message')
-except ValueError:
-    ts_idx, id_idx, msg_idx = 0, 1, 2
-    print(f"DEBUG: Using default column indices ts={ts_idx}, id={id_idx}, msg={msg_idx}")
+    id_idx = header.index('subnet_number')
+    msg_idx = header.index('content')
+    print(f"DEBUG: Column indices ts={ts_idx}, subnet={id_idx}, msg={msg_idx}")
+except ValueError as e:
+    print(f"ERROR: Required column not found: {e}")
+    raise
 
-groups = defaultdict(list)
+groups = defaultdict(list)(list)
 for row in rows[1:]:
     ts = row[ts_idx]
     date_part = parse_date(ts)
