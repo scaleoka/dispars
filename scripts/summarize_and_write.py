@@ -60,40 +60,44 @@ def analyze_with_openai(messages: list[str]) -> str:
         "Верни строго JSON-объект с ключами 'problems', 'updates', 'plans'. "
         "Каждое значение — массив коротких строк."
     )
-    user_prompt = "
-".join(messages)
+    user_prompt = "\n".join(messages)
     response = openai.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system",  "content": system_prompt},
-            {"role": "user",    "content": user_prompt}
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
         ],
         temperature=0
     )
     content = response.choices[0].message.content.strip()
+    # Remove code fences if present
     if content.startswith("```") and content.endswith("```"):
-        content = content.strip("`
-json")
+        content = content.strip('`')
     try:
         data = json.loads(content)
     except json.JSONDecodeError:
-        text = content.replace('
-', ' ')
+        text = content.replace('\n', ' ')
         return text[:500]
+
     parts = []
+    # Problems
     if data.get('problems'):
-        parts.append("🛑 " + "; ".join(data['problems']))
+        parts.append('🛑 ' + '; '.join(data['problems']))
     else:
-        parts.append("🛑 —")
+        parts.append('🛑 —')
+    # Updates
     if data.get('updates'):
-        parts.append("🔄 " + "; ".join(data['updates']))
+        parts.append('🔄 ' + '; '.join(data['updates']))
     else:
-        parts.append("🔄 —")
+        parts.append('🔄 —')
+    # Plans
     if data.get('plans'):
-        parts.append("🚀 " + "; ".join(data['plans']))
+        parts.append('🚀 ' + '; '.join(data['plans']))
     else:
-        parts.append("🚀 —")
-    return "   ".join(parts)
+        parts.append('🚀 —')
+    # Join with three spaces
+    return '   '.join(parts)
+
 
 def main():
     # Open source sheet and read all data
