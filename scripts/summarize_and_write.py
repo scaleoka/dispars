@@ -54,15 +54,14 @@ def parse_date(ts: str) -> str:
 def analyze_with_openai(messages: list[str]) -> str:
     """
     Send messages list to OpenAI Chat API to classify into three categories.
-    Returns a Markdown-formatted summary.
+    Returns a concise summary string with emojis.
     """
     system_prompt = (
-        "Ты классифицируешь список сообщений по трём категориям: "
-        "🛑 Проблемы, 🔄 Обновления, 🚀 Релизы/Планы. "
-        "Ответь строго JSON-объектом со свойствами 'problems', 'updates', 'plans'."
+        "Верни строго JSON-объект с ключами 'problems', 'updates', 'plans'. "
+        "Каждое значение — массив коротких строк."
     )
-    user_prompt = "\n".join(messages)
-    # Use new OpenAI Python v1 interface
+    user_prompt = "
+".join(messages)
     response = openai.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -72,26 +71,29 @@ def analyze_with_openai(messages: list[str]) -> str:
         temperature=0
     )
     content = response.choices[0].message.content.strip()
+    if content.startswith("```") and content.endswith("```"):
+        content = content.strip("`
+json")
     try:
         data = json.loads(content)
     except json.JSONDecodeError:
-        return content
-
-    lines = []
+        text = content.replace('
+', ' ')
+        return text[:500]
+    parts = []
     if data.get('problems'):
-        lines.append('🛑 Проблемы:')
-        for item in data['problems']:
-            lines.append(f"- {item}")
+        parts.append("🛑 " + "; ".join(data['problems']))
+    else:
+        parts.append("🛑 —")
     if data.get('updates'):
-        lines.append('🔄 Обновления:')
-        for item in data['updates']:
-            lines.append(f"- {item}")
+        parts.append("🔄 " + "; ".join(data['updates']))
+    else:
+        parts.append("🔄 —")
     if data.get('plans'):
-        lines.append('🚀 Релизы/Планы:')
-        for item in data['plans']:
-            lines.append(f"- {item}")
-    return "\n".join(lines)
-
+        parts.append("🚀 " + "; ".join(data['plans']))
+    else:
+        parts.append("🚀 —")
+    return "   ".join(parts)
 
 def main():
     # Open source sheet and read all data
