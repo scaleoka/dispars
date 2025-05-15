@@ -61,7 +61,7 @@ except ValueError as e:
     print(f"ERROR: Required column not found: {e}")
     raise
 
-groups = defaultdict(list)(list)
+groups = defaultdict(list)
 for row in rows[1:]:
     ts = row[ts_idx]
     date_part = parse_date(ts)
