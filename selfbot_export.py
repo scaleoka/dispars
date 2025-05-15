@@ -11,7 +11,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 # === Настройки ===
 DB_PATH     = os.path.join(os.getcwd(), "leveldb")
 # Список ID каналов: задаётся через секрет CHANNEL_IDS_JSON (формат JSON-массив или CSV)
-raw_ids    = os.environ.get("CHANNEL_IDS_JSON", "")
+raw_ids    = os.environ.get("CHANNEL_IDS", "")
 if raw_ids:
     try:
         CHANNEL_IDS = json.loads(raw_ids)
@@ -22,7 +22,7 @@ else:
 
 WEEK_DAYS    = 7
 SHEET_ID     = os.environ["GOOGLE_SHEET_ID"]
-CREDS_JSON   = os.environ["GOOGLE_CREDS_JSON"]["GOOGLE_CREDS_JSON"]
+CREDS_JSON   = os.environ["GOOGLE_CREDS_JSON"]
 USER_TOKEN   = os.environ["DISCORD_USER_TOKEN"]
 
 # Инициализация Google Sheets
