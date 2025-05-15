@@ -1,4 +1,4 @@
-name: Discord Self‑Bot Export
+name: Discord Self-Bot Export
 
 on:
   workflow_dispatch:
@@ -13,14 +13,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run self‑bot exporter
+      - name: Run self-bot exporter
         id: selfbot
         env:
           DISCORD_USER_TOKEN: ${{ secrets.DISCORD_USER_TOKEN }}
           GOOGLE_CREDS_JSON:  ${{ secrets.GOOGLE_CREDS_JSON }}
           GOOGLE_SHEET_ID:    ${{ secrets.GOOGLE_SHEET_ID }}
-          CHANNEL_IDS_JSON:   ${{ secrets.CHANNEL_IDS }}  # CSV list: id1,id2,id3
+          CHANNEL_IDS:        ${{ secrets.CHANNEL_IDS }}  # CSV list: id,id,id...
         run: |
+          echo "DEBUG: $CHANNEL_IDS"
           python -m pip install --upgrade pip
           pip install discord.py-self gspread oauth2client plyvel
           python selfbot_export.py
@@ -31,7 +32,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add exports/
-          git commit -m "Automated Discord export via self‑bot"
+          git commit -m "Automated Discord export via self-bot"
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
