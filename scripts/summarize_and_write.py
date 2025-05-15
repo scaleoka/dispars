@@ -37,20 +37,16 @@ def parse_date(ts: str) -> str:
     Returns date formatted as 'dd.MM.YYYY'.
     """
     try:
-        # Try ISO
         dt = datetime.fromisoformat(ts)
     except ValueError:
         try:
-            # Try custom date format
             dt = datetime.strptime(ts, '%d.%m.%Y')
         except ValueError:
             if ts.isdigit():
-                # Snowflake timestamp in ms
                 snowflake = int(ts)
                 ms = (snowflake >> 22) + DISCORD_EPOCH
                 dt = datetime.fromtimestamp(ms / 1000.0)
             else:
-                # Fallback to current datetime
                 dt = datetime.now()
     return dt.strftime('%d.%m.%Y')
 
@@ -66,7 +62,8 @@ def analyze_with_openai(messages: list[str]) -> str:
         "Ответь строго JSON-объектом со свойствами 'problems', 'updates', 'plans'."
     )
     user_prompt = "\n".join(messages)
-    response = openai.ChatCompletion.create(
+    # Use new OpenAI Python v1 interface
+    response = openai.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {"role": "system",  "content": system_prompt},
@@ -78,10 +75,8 @@ def analyze_with_openai(messages: list[str]) -> str:
     try:
         data = json.loads(content)
     except json.JSONDecodeError:
-        # Return raw content if JSON parsing fails
         return content
 
-    # Format JSON into Markdown sections
     lines = []
     if data.get('problems'):
         lines.append('🛑 Проблемы:')
@@ -97,7 +92,6 @@ def analyze_with_openai(messages: list[str]) -> str:
             lines.append(f"- {item}")
     return "\n".join(lines)
 
-# --- Main Logic ---
 
 def main():
     # Open source sheet and read all data
@@ -118,7 +112,7 @@ def main():
     today_str = datetime.now().strftime('%d.%m.%Y')
     print(f"DEBUG: Filtering messages for date {today_str}")
 
-    # Group messages by subnet for today's date
+    # Group messages by subnet
     groups: dict[str, list[str]] = defaultdict(list)
     for row in rows[1:]:
         date_part = parse_date(row[ts_idx])
@@ -137,14 +131,14 @@ def main():
     sh_dst = gc.open_by_key(dst_key)
     sheet_dst = sh_dst.worksheet('Dis и выводы')
 
-    # Find today's column in header row
+    # Find today's column
     header_dst = sheet_dst.row_values(1)
     if today_str not in header_dst:
         raise RuntimeError(f"Date {today_str} not found in destination header")
     col_idx = header_dst.index(today_str) + 1
     print(f"DEBUG: Writing to column {col_idx} heading '{today_str}'")
 
-    # Write summaries into corresponding rows by NetID
+    # Write summaries to sheet
     netids = sheet_dst.col_values(1)[1:]
     for subnet, summary in summaries.items():
         if subnet in netids:
@@ -152,7 +146,7 @@ def main():
             sheet_dst.update_cell(row_idx, col_idx, summary)
             print(f"DEBUG: Wrote summary for subnet {subnet} at row {row_idx}")
         else:
-            print(f"DEBUG: Subnet {subnet} not found in NetID column; skipped")
+            print(f"DEBUG: Subnet {subnet} not found; skipped")
 
 if __name__ == '__main__':
     main()
