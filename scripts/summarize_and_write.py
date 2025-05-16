@@ -1,48 +1,88 @@
 #!/usr/bin/env python3
 import os
 import json
-import re
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
 import openai
 import gspread
 
-DISCORD_EPOCH = 1420070400000
+# --- Constants ---
+DISCORD_EPOCH = 1420070400000  # milliseconds for Discord snowflake parsing
 
-# --- Авторизация ---
+# --- Environment & Authentication ---
+# Google Sheets service account credentials
 creds_json = os.environ.get('GOOGLE_CREDS_JSON')
 if not creds_json:
-    raise RuntimeError('GOOGLE_CREDS_JSON is missing')
+    raise RuntimeError('GOOGLE_CREDS_JSON environment variable is missing')
 creds_dict = json.loads(creds_json)
+# Authenticate gspread client
 gc = gspread.service_account_from_dict(creds_dict)
 
-openai.api_key = os.environ.get('OPENAI_API_KEY')
+# OpenAI API key
+openai_key = os.environ.get('OPENAI_API_KEY')
+if not openai_key:
+    raise RuntimeError('OPENAI_API_KEY environment variable is missing')
+openai.api_key = openai_key
+
+# Sheet IDs
 src_key = os.environ.get('SRC_SHEET_ID')
 dst_key = os.environ.get('DST_SHEET_ID')
 if not src_key or not dst_key:
-    raise RuntimeError('SRC_SHEET_ID and DST_SHEET_ID are required')
+    raise RuntimeError('SRC_SHEET_ID and DST_SHEET_ID environment variables are required')
 
-# --- Разбор временных меток ---
+# --- Helper Functions ---
 def parse_date(ts: str) -> str:
+    """
+    Parse timestamp string which may be ISO format, 'dd.MM.YYYY', or Discord snowflake ID.
+    Returns date formatted as 'dd.MM.YYYY'.
+    """
     try:
-        return datetime.fromisoformat(ts).strftime('%d.%m.%Y')
-    except:
+        dt = datetime.fromisoformat(ts)
+    except ValueError:
         try:
-            return datetime.strptime(ts, '%d.%m.%Y').strftime('%d.%m.%Y')
-        except:
+            dt = datetime.strptime(ts, '%d.%m.%Y')
+        except ValueError:
             if ts.isdigit():
-                ms = (int(ts) >> 22) + DISCORD_EPOCH
-                return datetime.fromtimestamp(ms / 1000.0).strftime('%d.%m.%Y')
-    return datetime.now().strftime('%d.%m.%Y')
+                snowflake = int(ts)
+                ms = (snowflake >> 22) + DISCORD_EPOCH
+                dt = datetime.fromtimestamp(ms / 1000.0)
+            else:
+                dt = datetime.now()
+    return dt.strftime('%d.%m.%Y')
 
-# --- OpenAI-анализ ---
+
 def analyze_with_openai(messages: list[str]) -> str:
     system_prompt = (
-        "Ты классифицируешь список сообщений. Верни строго JSON-объект с ключами "
-        "'problems', 'updates', 'plans'. Тексты внутри массивов должны быть на русском языке, "
-        "короткими фразами. Никаких markdown или ```json."
+        "Ты аналитик. Тебе поступает список сообщений на английском языке. "
+        "Проанализируй их и составь краткий структурированный отчёт по трём категориям:
+"
+        "
+🛑 Проблемы
+🔄 Обновления
+🚀 Релизы / Планы
+"
+        "
+Для каждой категории выдели тезисные пункты (в виде списка), сохраняя детали и контекст. "
+        "Пиши на русском языке. Не упрощай и не сокращай важные формулировки. "
+        "Не пересказывай — выжимай суть. Каждое сообщение — как блок фактов. "
+        "
+Формат ответа строго следующий:
+"
+        "
+🛑 Проблемы
+• …
+• …
+
+🔄 Обновления
+• …
+• …
+
+🚀 Релизы / Планы
+• …
+• …"
     )
-    user_prompt = "\n".join(messages)
+    user_prompt = "
+".join(messages)
     response = openai.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -51,80 +91,82 @@ def analyze_with_openai(messages: list[str]) -> str:
         ],
         temperature=0
     )
-    raw = response.choices[0].message.content.strip()
+    return response.choices[0].message.content.strip()
 
-    if raw.lower().startswith("json"):
-        raw = raw[raw.find("{"):]
-    if raw.startswith("```") and raw.endswith("```"):
-        raw = raw.strip("`")
+    parts = []
+    # Problems
+    if data.get('problems'):
+        parts.append('🛑 ' + '; '.join(data['problems']))
+    else:
+        parts.append('🛑 —')
+    # Updates
+    if data.get('updates'):
+        parts.append('🔄 ' + '; '.join(data['updates']))
+    else:
+        parts.append('🔄 —')
+    # Plans
+    if data.get('plans'):
+        parts.append('🚀 ' + '; '.join(data['plans']))
+    else:
+        parts.append('🚀 —')
+    # Join with three spaces
+    return '   '.join(parts)
 
-    m = re.search(r"\{.*\}", raw, re.DOTALL)
-    if m:
-        raw = m.group(0)
 
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        return raw.replace("\n", " ")[:500]
-
-    result = []
-    result.append("🛑 " + "; ".join(data.get("problems", [])) if data.get("problems") else "🛑 —")
-    result.append("🔄 " + "; ".join(data.get("updates", [])) if data.get("updates") else "🔄 —")
-    result.append("🚀 " + "; ".join(data.get("plans", [])) if data.get("plans") else "🚀 —")
-    return "   ".join(result)
-
-# --- Основной процесс ---
 def main():
-    # дата вчера
-    yesterday = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
-    target_date = yesterday.strftime('%d.%m.%Y')
-    print(f"DEBUG: Filtering for date {target_date}")
-
-    # читаем таблицу-источник
+    # Open source sheet and read all data
     sh_src = gc.open_by_key(src_key)
     sheet_src = sh_src.worksheet('archive')
     rows = sheet_src.get_all_values()
     header = rows[0]
+    print(f"DEBUG: Source header: {header}")
 
+    # Detect column indices
     try:
         ts_idx = header.index('timestamp')
         id_idx = header.index('subnet_number')
         msg_idx = header.index('content')
     except ValueError as e:
-        raise RuntimeError(f"Column missing: {e}")
+        raise RuntimeError(f"Required column not found: {e}")
 
-    groups = defaultdict(list)
+    today_str = datetime.now().strftime('%d.%m.%Y')
+    print(f"DEBUG: Filtering messages for date {today_str}")
+
+    # Group messages by subnet
+    groups: dict[str, list[str]] = defaultdict(list)
     for row in rows[1:]:
-        date = parse_date(row[ts_idx])
-        if date == target_date:
+        date_part = parse_date(row[ts_idx])
+        if date_part == today_str:
             subnet = str(row[id_idx])
-            msg = row[msg_idx]
-            groups[subnet].append(msg)
+            groups[subnet].append(row[msg_idx])
+    print(f"DEBUG: Found messages for subnets: {list(groups.keys())}")
 
-    print(f"DEBUG: Subnets with messages: {list(groups.keys())}")
-
-    summaries = {}
+    # Analyze each subnet
+    summaries: dict[str, str] = {}
     for subnet, msgs in groups.items():
-        print(f"DEBUG: Analyzing subnet {subnet}")
+        print(f"DEBUG: Analyzing subnet {subnet} ({len(msgs)} messages)")
         summaries[subnet] = analyze_with_openai(msgs)
 
-    # запись в другую таблицу
+    # Open destination sheet
     sh_dst = gc.open_by_key(dst_key)
     sheet_dst = sh_dst.worksheet('Dis и выводы')
-    header_dst = sheet_dst.row_values(1)
-    if target_date not in header_dst:
-        raise RuntimeError(f"Date {target_date} not found in header row")
-    col_idx = header_dst.index(target_date) + 1
-    print(f"DEBUG: Writing to column {col_idx} ({target_date})")
 
+    # Find today's column
+    header_dst = sheet_dst.row_values(1)
+    if today_str not in header_dst:
+        raise RuntimeError(f"Date {today_str} not found in destination header")
+    col_idx = header_dst.index(today_str) + 1
+    print(f"DEBUG: Writing to column {col_idx} heading '{today_str}'")
+
+    # Write summaries to sheet
     netids = sheet_dst.col_values(1)[1:]
-    for subnet, result in summaries.items():
+    for subnet, summary in summaries.items():
         if subnet in netids:
-            row = netids.index(subnet) + 2
-            sheet_dst.update_cell(row, col_idx, result)
-            print(f"✅ {subnet} → row {row}, col {col_idx}")
+            row_idx = netids.index(subnet) + 2
+            sheet_dst.update_cell(row_idx, col_idx, summary)
+            print(f"DEBUG: Wrote summary for subnet {subnet} at row {row_idx}")
         else:
-            print(f"⚠️ Subnet {subnet} not found in NetUID")
+            print(f"DEBUG: Subnet {subnet} not found; skipped")
 
 if __name__ == '__main__':
     main()
