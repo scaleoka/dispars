@@ -57,7 +57,7 @@ def analyze_with_openai(messages: list[str]) -> str:
     )
     user_prompt = "\n".join(messages)
     response = openai.chat.completions.create(
-        model="gpt-4o-mini",
+        model="gpt-3.5-turbo-0125",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
