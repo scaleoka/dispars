@@ -52,7 +52,7 @@ if not messages_by_subnet:
 # --- Формируем единый запрос ---
 prompt_blocks = []
 for subnet, messages in messages_by_subnet.items():
-    block = f"Subnet {subnet}:\n" + "\n".join(messages)
+    block = f"Subnet {subnet}:\n" + "\n".join(str(m) for m in messages)
     prompt_blocks.append(block)
 
 full_prompt = "\n\n".join(prompt_blocks)
