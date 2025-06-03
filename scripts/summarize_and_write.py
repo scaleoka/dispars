@@ -118,10 +118,14 @@ buffer = []
 updates = {}
 
 for line in result.splitlines():
-    if re.match(r'^Subnet\s+\d+[.:]?', line.strip()):
+    if re.match(r'^[\*\s]*Subnet\s+\d+[.:]?[\*\s]*', line.strip()):
         if current_subnet and buffer:
-            updates[current_subnet] = "\n".join(buffer).strip()
-        match = re.search(r'Subnet\s+(\d+(?:\.\d+)?)', line.strip())
+            try:
+                normalized_subnet = str(int(float(current_subnet)))
+            except:
+                normalized_subnet = current_subnet.strip()
+            updates[normalized_subnet] = "\n".join(buffer).strip()
+        match = re.search(r'Subnet\s+(\d+(?:\.\d+)?)', line)
         current_subnet = match.group(1) if match else None
         buffer = []
     elif current_subnet:
