@@ -87,20 +87,69 @@ system_prompt = (
     "Анализируй только те подсети, сообщения по которым есть ниже!"
 )
 
-# --- GPT-запрос ---
-print("🧠 Отправка в GPT...")
-response = openai.chat.completions.create(
-    model="gpt-4o-mini",
-    messages=[
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt}
-    ],
-    temperature=0
-)
-result = response.choices[0].message.content.strip()
-print("📤 Ответ GPT (первые 1000 символов):")
-print(result[:1000])
-        
+# --- БАТЧЕВАЯ GPT-ОБРАБОТКА ---
+BATCH_SIZE = 40
+
+subnet_items = list(messages_by_subnet.items())
+all_updates = {}
+
+for batch_start in range(0, len(subnet_items), BATCH_SIZE):
+    batch = subnet_items[batch_start:batch_start+BATCH_SIZE]
+    batch_subnets = [subnet for subnet, _ in batch]
+    batch_blocks = [
+        f"Subnet {subnet}:\n" + "\n".join(str(m) for m in messages)
+        for subnet, messages in batch
+    ]
+    batch_prompt = "\n\n".join(batch_blocks)
+    batch_list_str = ', '.join(batch_subnets)
+    user_prompt = (
+        f"В предоставленных сообщениях встречаются только подсети: {batch_list_str}.\n\n"
+        f"{batch_prompt}"
+    )
+    response = openai.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        temperature=0
+    )
+    result = response.choices[0].message.content.strip()
+    print(f"📤 Ответ GPT для батча {batch_start // BATCH_SIZE + 1} (первые 500 символов):")
+    print(result[:500])
+    
+    # --- Разбор результата батча ---
+    current_subnet = None
+    buffer = []
+    batch_updates = {}
+    for line in result.splitlines():
+        if re.match(r'^[\*\s]*Subnet\s+\d+[.:]?[\*\s]*', line.strip()):
+            if current_subnet and buffer:
+                try:
+                    normalized_subnet = str(int(float(current_subnet)))
+                except:
+                    normalized_subnet = current_subnet.strip()
+                batch_updates[normalized_subnet] = "\n".join(buffer).strip()
+            match = re.search(r'Subnet\s+(\d+(?:\.\d+)?)', line)
+            current_subnet = match.group(1) if match else None
+            buffer = []
+        elif current_subnet:
+            buffer.append(line)
+    if current_subnet and buffer:
+        try:
+            normalized_subnet = str(int(float(current_subnet)))
+        except:
+            normalized_subnet = current_subnet.strip()
+        batch_updates[normalized_subnet] = "\n".join(buffer).strip()
+    
+    # --- Добавляем в общий результат ---
+    all_updates.update(batch_updates)
+
+print(f"📦 Собрано итоговых отчётов: {len(all_updates)} подсетей")
+print(f"🔍 Сообщения найдены для {len(actual_subnets)} подсетей: {sorted(actual_subnets)}")
+if set(all_updates.keys()) - actual_subnets:
+    print(f"⚠️ GPT попытался добавить несуществующие сабнеты: {set(all_updates.keys()) - actual_subnets}")
+
 # --- Запись в таблицу ---
 sh_dst = gc.open_by_key(GOOGLE_SHEET2_ID)
 sheet = sh_dst.worksheet("Dis и выводы")
@@ -115,47 +164,13 @@ if not any(h.strip() == yesterday_str for h in header):
 
 col = next(i for i, h in enumerate(header) if h.strip() == yesterday_str) + 1
 
-# --- Разбор ответа ---
-print("✍️ Запись результатов...")
 netids = [str(int(i)) for i in sheet.col_values(1)[1:] if i.strip()]
-current_subnet = None
-buffer = []
-updates = {}
 
-for line in result.splitlines():
-    if re.match(r'^[\*\s]*Subnet\s+\d+[.:]?[\*\s]*', line.strip()):
-        if current_subnet and buffer:
-            try:
-                normalized_subnet = str(int(float(current_subnet)))
-            except:
-                normalized_subnet = current_subnet.strip()
-            updates[normalized_subnet] = "\n".join(buffer).strip()
-        match = re.search(r'Subnet\s+(\d+(?:\.\d+)?)', line)
-        current_subnet = match.group(1) if match else None
-        buffer = []
-    elif current_subnet:
-        buffer.append(line)
+# --- Фильтруем только те подсети, что реально были в actual_subnets ---
+filtered_updates = {k: v for k, v in all_updates.items() if k in actual_subnets}
 
-if current_subnet and buffer:
-    try:
-        normalized_subnet = str(int(float(current_subnet)))
-    except:
-        normalized_subnet = current_subnet.strip()
-    updates[normalized_subnet] = "\n".join(buffer).strip()
-
-print(f"📦 Ключи подсетей для записи: {list(updates.keys())}")
-print(f"📦 NetID в таблице: {netids}")
-print(f"🔍 Сообщения найдены для {len(actual_subnets)} подсетей: {sorted(actual_subnets)}")
-if set(updates.keys()) - actual_subnets:
-    print(f"⚠️ GPT попытался добавить несуществующие сабнеты: {set(updates.keys()) - actual_subnets}")
-
-
-# --- ВОТ ТУТ! Фильтруем только те подсети, что реально были в actual_subnets ---
-filtered_updates = {k: v for k, v in updates.items() if k in actual_subnets}
-
-# --- Группируем записи для батча ---
 cell_list = []
-for subnet, summary in filtered_updates.items():    # <--- ТОЛЬКО filtered_updates!
+for subnet, summary in filtered_updates.items():
     if subnet in netids:
         row = netids.index(subnet) + 2
         cell = gspread.cell.Cell(row=row, col=col, value=summary)
@@ -164,7 +179,6 @@ for subnet, summary in filtered_updates.items():    # <--- ТОЛЬКО filtered
     else:
         print(f"⚠️ Subnet {subnet} не найдена в таблице")
 
-# --- Массовое обновление (batch update) ---
 if cell_list:
     sheet.update_cells(cell_list)
     print(f"✅ Обновлено {len(cell_list)} ячеек одним запросом")
@@ -172,3 +186,4 @@ else:
     print("⚠️ Нет данных для записи!")
 
 print("🎉 Готово. Примерная стоимость: ${:.4f}".format(0.0005 * total_tokens / 1000 + 0.0015 * 2000 / 1000))
+
