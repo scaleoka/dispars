@@ -9,8 +9,8 @@ import gspread
 
 # --- Настройки API ---
 openai.api_key = os.environ['OPENAI_API_KEY']
-SRC_SHEET_ID = os.environ['GOOGLE_SHEET_ID']       # <-- источник
-DST_SHEET_ID = os.environ['GOOGLE_SHEET2_ID']      # <-- приёмник
+GOOGLE_SHEET_ID = os.environ['GOOGLE_SHEET_ID']       # id источника
+GOOGLE_SHEET2_ID = os.environ['GOOGLE_SHEET2_ID']     # id приёмника
 creds = json.loads(os.environ['GOOGLE_CREDS_JSON'])
 gc = gspread.service_account_from_dict(creds)
 
@@ -35,7 +35,7 @@ def estimate_tokens(text):
 # --- Подготовка ---
 print("🔄 Загрузка данных из таблицы...")
 yesterday = datetime.utcnow().date() - timedelta(days=1)
-sh_src = gc.open_by_key(SRC_SHEET_ID)
+sh_src = gc.open_by_key(GOOGLE_SHEET_ID)
 df = sh_src.worksheet("archive").get_all_records()
 
 messages_by_subnet = defaultdict(list)
@@ -96,7 +96,7 @@ result = response.choices[0].message.content.strip()
 print("✅ Ответ получен")
 
 # --- Запись в таблицу ---
-sh_dst = gc.open_by_key(DST_SHEET_ID)
+sh_dst = gc.open_by_key(GOOGLE_SHEET2_ID)
 sheet = sh_dst.worksheet("Dis и выводы")
 header = sheet.row_values(1)
 yesterday_str = yesterday.strftime('%d.%m.%Y')
