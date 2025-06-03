@@ -141,13 +141,22 @@ if current_subnet and buffer:
 print(f"📦 Ключи подсетей для записи: {list(updates.keys())}")
 print(f"📦 NetID в таблице: {netids}")
 
-# --- Пишем в ячейки ---
+# --- Группируем записи для батча ---
+cell_list = []
 for subnet, summary in updates.items():
     if subnet in netids:
         row = netids.index(subnet) + 2
-        sheet.update_cell(row, col, summary)
-        print(f"✅ {subnet} → row {row}, col {col}")
+        cell = gspread.cell.Cell(row=row, col=col, value=summary)
+        cell_list.append(cell)
+        print(f"📝 Подготовлено: {subnet} → row {row}, col {col}")
     else:
         print(f"⚠️ Subnet {subnet} не найдена в таблице")
+
+# --- Массовое обновление (batch update) ---
+if cell_list:
+    sheet.update_cells(cell_list)
+    print(f"✅ Обновлено {len(cell_list)} ячеек одним запросом")
+else:
+    print("⚠️ Нет данных для записи!")
 
 print("🎉 Готово. Примерная стоимость: ${:.4f}".format(0.0005 * total_tokens / 1000 + 0.0015 * 2000 / 1000))
