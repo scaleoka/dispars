@@ -9,8 +9,8 @@ import gspread
 
 # --- Настройки API ---
 openai.api_key = os.environ['OPENAI_API_KEY']
-SRC_SHEET_ID = os.environ['SRC_SHEET_ID']
-DST_SHEET_ID = os.environ['DST_SHEET_ID']
+SRC_SHEET_ID = os.environ['GOOGLE_SHEET_ID']       # <-- источник
+DST_SHEET_ID = os.environ['GOOGLE_SHEET2_ID']      # <-- приёмник
 creds = json.loads(os.environ['GOOGLE_CREDS_JSON'])
 gc = gspread.service_account_from_dict(creds)
 
