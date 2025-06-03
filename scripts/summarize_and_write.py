@@ -100,26 +100,33 @@ sh_dst = gc.open_by_key(DST_SHEET_ID)
 sheet = sh_dst.worksheet("Dis и выводы")
 header = sheet.row_values(1)
 yesterday_str = yesterday.strftime('%d.%m.%Y')
-if yesterday_str not in header:
+if not any(h.strip() == yesterday_str for h in header):
     raise Exception("❌ В таблице нет колонки с датой " + yesterday_str)
-col = header.index(yesterday_str) + 1
+col = next(i for i, h in enumerate(header) if h.strip() == yesterday_str) + 1
 
 # --- Разбор ответа ---
 print("✍️ Запись результатов...")
-netids = sheet.col_values(1)[1:]  # без заголовка
+netids = [str(int(i)) for i in sheet.col_values(1)[1:] if i.strip()]
 current_subnet = None
 buffer = []
 updates = {}
+
 for line in result.splitlines():
-    if line.strip().startswith("Subnet"):
+    if re.match(r'^Subnet\s+\d+[.:]?', line.strip()):
         if current_subnet and buffer:
             updates[current_subnet] = "\n".join(buffer).strip()
-        current_subnet = line.strip().split()[1]
+        match = re.search(r'Subnet\s+(\d+(?:\.\d+)?)', line.strip())
+        current_subnet = match.group(1) if match else None
         buffer = []
     elif current_subnet:
         buffer.append(line)
+
 if current_subnet and buffer:
-    updates[current_subnet] = "\n".join(buffer).strip()
+    try:
+        normalized_subnet = str(int(float(current_subnet)))
+    except:
+        normalized_subnet = current_subnet.strip()
+    updates[normalized_subnet] = "\n".join(buffer).strip()
 
 # --- Пишем в ячейки ---
 for subnet, summary in updates.items():
