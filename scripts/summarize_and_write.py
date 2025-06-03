@@ -133,6 +133,9 @@ if current_subnet and buffer:
         normalized_subnet = current_subnet.strip()
     updates[normalized_subnet] = "\n".join(buffer).strip()
 
+print(f"📦 Ключи подсетей для записи: {list(updates.keys())}")
+print(f"📦 NetID в таблице: {netids}")
+
 # --- Пишем в ячейки ---
 for subnet, summary in updates.items():
     if subnet in netids:
