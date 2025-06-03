@@ -25,9 +25,10 @@ jobs:
 
       - name: Summarize and write to report sheet
         env:
-          GOOGLE_CREDS_JSON: ${{ secrets.GOOGLE_CREDS_JSON }}
-          SRC_SHEET_ID:    ${{ secrets.GOOGLE_SHEET_ID }}
-          DST_SHEET_ID:    ${{ secrets.GOOGLE_SHEET2_ID }}
-          OPENAI_API_KEY:  ${{ secrets.OPENAI_API_KEY }}
+            GOOGLE_CREDS_JSON: ${{ secrets.GOOGLE_CREDS_JSON }}
+            GOOGLE_SHEET_ID:   ${{ secrets.GOOGLE_SHEET_ID }}
+            GOOGLE_SHEET2_ID:  ${{ secrets.GOOGLE_SHEET2_ID }}
+            OPENAI_API_KEY:    ${{ secrets.OPENAI_API_KEY }}
+
         run: |
           python scripts/summarize_and_write.py
