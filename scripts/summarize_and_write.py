@@ -48,8 +48,9 @@ for row in df:
 if not messages_by_subnet:
     print("⚠️ Нет сообщений за вчера.")
     exit()
-    
-actual_subnets = set(messages_by_subnet.keys())   
+
+actual_subnets = set(messages_by_subnet.keys())
+actual_list_str = ', '.join(sorted(actual_subnets, key=int))
 
 # --- Формируем единый запрос ---
 prompt_blocks = []
@@ -58,6 +59,10 @@ for subnet, messages in messages_by_subnet.items():
     prompt_blocks.append(block)
 
 full_prompt = "\n\n".join(prompt_blocks)
+user_prompt = (
+    f"В предоставленных сообщениях встречаются только подсети: {actual_list_str}.\n\n"
+    f"{full_prompt}"
+)
 total_tokens = estimate_tokens(full_prompt)
 print(f"📊 GPT-ввод: ~{total_tokens} токенов")
 
@@ -93,7 +98,7 @@ response = openai.chat.completions.create(
     model="gpt-4o-mini",
     messages=[
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": full_prompt}
+        {"role": "user", "content": user_prompt}
     ],
     temperature=0
 )
