@@ -93,7 +93,8 @@ response = openai.chat.completions.create(
     temperature=0
 )
 result = response.choices[0].message.content.strip()
-print("✅ Ответ получен")
+print("📤 Ответ GPT (первые 1000 символов):")
+print(result[:1000])
 
 # --- Запись в таблицу ---
 sh_dst = gc.open_by_key(GOOGLE_SHEET2_ID)
