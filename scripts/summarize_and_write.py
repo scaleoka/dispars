@@ -100,8 +100,13 @@ sh_dst = gc.open_by_key(DST_SHEET_ID)
 sheet = sh_dst.worksheet("Dis и выводы")
 header = sheet.row_values(1)
 yesterday_str = yesterday.strftime('%d.%m.%Y')
+
+# Если нет колонки с нужной датой — добавить в конец!
 if not any(h.strip() == yesterday_str for h in header):
-    raise Exception("❌ В таблице нет колонки с датой " + yesterday_str)
+    sheet.update_cell(1, len(header) + 1, yesterday_str)
+    print(f"➕ Добавлена новая колонка для даты: {yesterday_str}")
+    header.append(yesterday_str)  # чтобы col вычислился верно
+
 col = next(i for i, h in enumerate(header) if h.strip() == yesterday_str) + 1
 
 # --- Разбор ответа ---
