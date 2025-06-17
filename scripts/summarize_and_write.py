@@ -50,7 +50,8 @@ if not messages_by_subnet:
     exit()
 
 actual_subnets = set(messages_by_subnet.keys())
-actual_list_str = ', '.join(sorted(actual_subnets, key=int))
+filtered_actual_subnets = [s for s in actual_subnets if str(s).strip().isdigit()]
+actual_list_str = ', '.join(sorted(filtered_actual_subnets, key=int))
 
 # --- Формируем единый запрос ---
 prompt_blocks = []
