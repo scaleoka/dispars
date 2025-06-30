@@ -34,7 +34,10 @@ def estimate_tokens(text):
 
 # --- Подготовка ---
 print("🔄 Загрузка данных из таблицы...")
-yesterday = datetime.utcnow().date() - timedelta(days=1)
+
+# Фиксированная дата: 27.06.2025
+yesterday = datetime.strptime("27.06.2025", "%d.%m.%Y").date()
+
 sh_src = gc.open_by_key(GOOGLE_SHEET_ID)
 df = sh_src.worksheet("archive").get_all_records()
 
@@ -46,7 +49,7 @@ for row in df:
         messages_by_subnet[subnet].append(row['content'])
 
 if not messages_by_subnet:
-    print("⚠️ Нет сообщений за вчера.")
+    print("⚠️ Нет сообщений за 27.06.2025.")
     exit()
 
 actual_subnets = set(messages_by_subnet.keys())
@@ -95,7 +98,7 @@ system_prompt = (
 )
 
 # --- БАТЧЕВАЯ GPT-ОБРАБОТКА ---
-BATCH_SIZE = 40
+BATCH_SIZE = 20
 
 subnet_items = list(messages_by_subnet.items())
 all_updates = {}
