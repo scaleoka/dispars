@@ -35,8 +35,8 @@ def estimate_tokens(text):
 # --- Подготовка ---
 print("🔄 Загрузка данных из таблицы...")
 
-# Фиксированная дата: 27.06.2025
-yesterday = datetime.strptime("27.06.2025", "%d.%m.%Y").date()
+# Фиксированная дата: 28.06.2025
+yesterday = datetime.strptime("28.06.2025", "%d.%m.%Y").date()
 
 sh_src = gc.open_by_key(GOOGLE_SHEET_ID)
 df = sh_src.worksheet("archive").get_all_records()
@@ -49,7 +49,7 @@ for row in df:
         messages_by_subnet[subnet].append(row['content'])
 
 if not messages_by_subnet:
-    print("⚠️ Нет сообщений за 27.06.2025.")
+    print("⚠️ Нет сообщений за 28.06.2025.")
     exit()
 
 actual_subnets = set(messages_by_subnet.keys())
