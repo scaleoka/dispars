@@ -1,29 +1,22 @@
-import sys
-import os
-
-# Удаляем модуль discord, если случайно был импортирован из неверного места
-if "discord" in sys.modules:
-    del sys.modules["discord"]
-
-# Убираем текущую директорию из sys.path, если она мешает
-cwd = os.getcwd()
-if cwd in sys.path:
-    sys.path.remove(cwd)
-
-# Теперь импортируем правильный discord
-import discord
-print("✅ discord loaded from:", discord.__file__)
-
 #!/usr/bin/env python3
+import sys
 import os
 import asyncio
 import requests
-import discord  # pip install discord.py-self
+
+# Удаляем конфликтующие модули и пути
+if "discord" in sys.modules:
+    del sys.modules["discord"]
+if os.getcwd() in sys.path:
+    sys.path.remove(os.getcwd())
+
+# Импорт нужного discord
+import discord
+print("✅ discord loaded from:", discord.__file__)
 
 # === Настройки ===
 DISCORD_CHANNEL_ID = 1375534889486778409
 DISCORD_USER_TOKEN = os.environ["DISCORD_USER_TOKEN"]
-
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 
@@ -60,4 +53,3 @@ async def on_message(message):
 
 if __name__ == "__main__":
     asyncio.run(client.start(DISCORD_USER_TOKEN))
-
