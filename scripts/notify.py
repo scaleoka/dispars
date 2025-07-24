@@ -1,18 +1,12 @@
-import sys
+#!/usr/bin/env python3
 import os
+import sys
 import asyncio
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+import discord  # from discord.py-self
 
-# Удаляем конфликтующие модули и пути
-if "discord" in sys.modules:
-    del sys.modules["discord"]
-if os.getcwd() in sys.path:
-    sys.path.remove(os.getcwd())
-
-# Импорт нужного discord
-import discord
-print("\u2705 discord loaded from:", discord.__file__)
+print("✅ discord loaded from:", discord.__file__)
 
 # === Настройки ===
 DISCORD_CHANNEL_ID = 1375534889486778409
@@ -20,10 +14,11 @@ DISCORD_USER_TOKEN = os.environ["DISCORD_USER_TOKEN"]
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 
-# Время окончания работы (конец текущего часа)
-END_TIME = datetime.utcnow().replace(minute=59, second=59, microsecond=0)
+# === Время завершения ===
+now = datetime.now(timezone.utc)
+END_TIME = now.replace(minute=59, second=59, microsecond=0)
 
-
+# === Telegram ===
 def send_telegram_message(text):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
@@ -37,37 +32,29 @@ def send_telegram_message(text):
     except Exception as e:
         print(f"[ERROR] Telegram send failed: {e}")
 
-
-intents = discord.Intents.default()
-intents.message_content = True
-client = discord.Client(intents=intents)
-
+# === Discord Client ===
+client = discord.Client()
 
 @client.event
 async def on_ready():
     print(f"[INFO] Logged in as {client.user} (ID: {client.user.id})")
 
-    # Получаем непрочитанные сообщения за предыдущий час
-    now = datetime.utcnow()
-    prev_hour_start = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
-    prev_hour_end = prev_hour_start + timedelta(hours=1)
+    # Получаем сообщения за предыдущий час
+    now = datetime.now(timezone.utc)
+    after = now - timedelta(hours=1)
+    channel = await client.fetch_channel(DISCORD_CHANNEL_ID)
 
-    channel = client.get_channel(DISCORD_CHANNEL_ID)
-    if channel is None:
-        print("[ERROR] Channel not found")
-        await client.close()
-        return
-
-    async for message in channel.history(after=prev_hour_start, before=prev_hour_end, oldest_first=True):
-        if message.author != client.user:
-            msg_text = f"<b>{message.author.name}</b>: {message.content}"
-            send_telegram_message(msg_text)
-
+    print(f"[INFO] Fetching messages after {after.isoformat()}...")
+    async for msg in channel.history(limit=100, after=after):
+        if msg.author.id != client.user.id:
+            text = f"<b>{msg.author.name}</b>: {msg.content}"
+            send_telegram_message(text)
 
 @client.event
 async def on_message(message):
-    if datetime.utcnow() > END_TIME:
-        print("[INFO] Time's up. Exiting.")
+    now = datetime.now(timezone.utc)
+    if now >= END_TIME:
+        print("[INFO] End of hour reached, closing.")
         await client.close()
         return
 
@@ -76,9 +63,8 @@ async def on_message(message):
     if message.author == client.user:
         return
 
-    msg_text = f"<b>{message.author.name}</b>: {message.content}"
-    send_telegram_message(msg_text)
-
+    text = f"<b>{message.author.name}</b>: {message.content}"
+    send_telegram_message(text)
 
 if __name__ == "__main__":
     asyncio.run(client.start(DISCORD_USER_TOKEN))
