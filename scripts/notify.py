@@ -12,9 +12,9 @@ TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN2"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID2"]
 
 def send_telegram_message(text):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN2}/sendMessage"
     payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
+        "chat_id": TELEGRAM_CHAT_ID2,
         "text": text,
         "parse_mode": "HTML",
         "disable_web_page_preview": True
