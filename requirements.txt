@@ -4,4 +4,3 @@ oauth2client
 requests
 plyvel
 openai
-git+https://github.com/dolfies/discord.py-self.git
