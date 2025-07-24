@@ -2,8 +2,8 @@ name: Notify Discord to Telegram
 
 on:
   schedule:
-    - cron: "*/2 * * * *"  # каждые 2 минуты по UTC
-  workflow_dispatch:       # позволяет запуск вручную из интерфейса GitHub
+    - cron: "*/2 * * * *"
+  workflow_dispatch:
 
 jobs:
   run-notifier:
@@ -21,12 +21,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install discord.py-self requests
+          pip install -U git+https://github.com/dolfies/discord.py-self requests
 
       - name: Run notify script
         env:
           DISCORD_USER_TOKEN: ${{ secrets.DISCORD_USER_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN2 }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID2 }}
-        run: |
-          python notify.py
+        run: python dispars/scripts/notify.py
