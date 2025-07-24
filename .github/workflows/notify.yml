@@ -20,11 +20,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
           pip uninstall -y discord discord.py || true
           rm -rf ~/.cache/pip
-          pip install git+https://github.com/dolfies/discord.py-self.git
-          pip install requests
+          pip install -r requirements.txt
 
       - name: Run notify script
         env:
