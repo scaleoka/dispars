@@ -33,9 +33,8 @@ def send_telegram_message(text):
     except Exception as e:
         print(f"[ERROR] Telegram send failed: {e}")
 
-intents = discord.Intents.default()
-intents.messages = True
-client = discord.Client(intents=intents)
+# Без intents — в discord.py-self они не используются
+client = discord.Client()
 
 @client.event
 async def on_ready():
