@@ -2,7 +2,7 @@ name: Discord Notify to Telegram
 
 on:
   schedule:
-    - cron: "0 14 * * *"
+    - cron: "0 * * * *"  # каждый час
   workflow_dispatch:
 
 jobs:
