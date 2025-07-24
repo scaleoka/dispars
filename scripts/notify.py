@@ -1,3 +1,19 @@
+import sys
+import os
+
+# Удаляем модуль discord, если случайно был импортирован из неверного места
+if "discord" in sys.modules:
+    del sys.modules["discord"]
+
+# Убираем текущую директорию из sys.path, если она мешает
+cwd = os.getcwd()
+if cwd in sys.path:
+    sys.path.remove(cwd)
+
+# Теперь импортируем правильный discord
+import discord
+print("✅ discord loaded from:", discord.__file__)
+
 #!/usr/bin/env python3
 import os
 import asyncio
