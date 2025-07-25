@@ -15,6 +15,7 @@ CHANNEL_MAP = json.loads(os.environ["CHANNEL_MAP_JSON"])
 DISCORD_USER_TOKEN = os.environ["DISCORD_USER_TOKEN"]
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 
+# Завершение через 4 часа
 END_TIME = datetime.now(timezone.utc) + timedelta(hours=4)
 
 # === Telegram ===
@@ -27,9 +28,9 @@ def send_telegram_message(chat_id, text):
         "disable_web_page_preview": True
     }
     try:
-        r = requests.post(url, data=payload, timeout=5)
-        if r.status_code != 200:
-            print(f"[ERROR] Telegram error: {r.status_code} {r.text}")
+        response = requests.post(url, data=payload, timeout=5)
+        if response.status_code != 200:
+            print(f"[ERROR] Telegram send failed ({response.status_code}): {response.text}")
     except Exception as e:
         print(f"[ERROR] Telegram send failed: {e}")
 
@@ -47,17 +48,24 @@ async def on_ready():
         discord_channel_id = int(discord_channel_id_str)
         try:
             channel = await client.fetch_channel(discord_channel_id)
-            print(f"[INFO] Fetching recent messages from Discord channel {discord_channel_id}...")
+            print(f"[INFO] Fetching messages from {discord_channel_id} since {since.isoformat()}...")
 
             async for msg in channel.history(limit=100):
-                ts = msg.created_at.replace(tzinfo=timezone.utc)
+                ts = msg.created_at
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                else:
+                    ts = ts.astimezone(timezone.utc)
+
+                print(f"[DEBUG] {msg.author.name} at {ts.isoformat()} -> {msg.content[:80]}")
+
                 if since <= ts <= now and msg.author.id != client.user.id:
-                    print(f"[DEBUG] Sending message from {msg.author.name} at {ts.isoformat()}")
+                    print(f"[INFO] Sending message from {msg.author.name}")
                     text = f"<b>{msg.author.name}</b>: {msg.content[:4000]}"
                     send_telegram_message(telegram_chat_id, text)
 
         except Exception as e:
-            print(f"[ERROR] Failed fetching messages for {discord_channel_id}: {e}")
+            print(f"[ERROR] Failed fetching for {discord_channel_id}: {e}")
 
 @client.event
 async def on_message(message):
@@ -69,7 +77,6 @@ async def on_message(message):
 
     channel_id_str = str(message.channel.id)
     if channel_id_str in CHANNEL_MAP and message.author != client.user:
-        print(f"[LIVE] {message.author.name}: {message.content[:100]}")
         text = f"<b>{message.author.name}</b>: {message.content[:4000]}"
         send_telegram_message(CHANNEL_MAP[channel_id_str], text)
 
