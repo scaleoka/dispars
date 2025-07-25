@@ -41,9 +41,7 @@ def send_telegram_message(chat_id: str, text: str):
         print(f"[ERROR] Telegram send failed: {e}")
 
 # ───── Discord client ─────
-intents = discord.Intents.default()
-intents.messages = True
-client = discord.Client(intents=intents)
+client = discord.Client()
 
 # ───── При подключении ─────
 @client.event
