@@ -33,9 +33,7 @@ def send_telegram_message(text):
         print(f"[ERROR] Telegram send failed: {e}")
 
 # === Discord Client ===
-intents = discord.Intents.default()
-intents.message_content = True  # необходимо для чтения сообщений
-client = discord.Client(intents=intents)
+client = discord.Client()  # без intents
 
 @client.event
 async def on_ready():
