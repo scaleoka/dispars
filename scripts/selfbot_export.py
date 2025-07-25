@@ -4,7 +4,7 @@ import json
 import os
 import requests
 from datetime import datetime, timedelta, timezone
-import discord  # dolfies/discord.py-self
+import discord  # from dolfies/discord.py-self
 
 print("✅ discord loaded from:", discord.__file__, flush=True)
 
@@ -20,16 +20,19 @@ except Exception as e:
 
 END_TIME = datetime.now(timezone.utc) + timedelta(hours=4)
 
-# ───── Прямая отправка текста без форматирования ─────
+# ───── Отправка plain text сообщений в Telegram ─────
 def send_telegram_message(chat_id: str, text: str):
     payload = {
         "chat_id": chat_id,
-        "text": text,
+        "text": text,  # Никаких Markdown или HTML!
         "disable_web_page_preview": True
     }
     try:
-        resp = requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-                             data=payload, timeout=5)
+        resp = requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            data=payload,
+            timeout=5
+        )
         print(f"[TELEGRAM] Status {resp.status_code} | {text}", flush=True)
     except Exception as e:
         print(f"[ERROR] Telegram send failed: {e}", flush=True)
@@ -74,6 +77,6 @@ async def on_message(message):
             except Exception as e:
                 print(f"[ERROR] Realtime message error in subnet {subnet_id}: {e}", flush=True)
 
-# ───── Запуск ─────
+# ───── Запуск клиента ─────
 if __name__ == "__main__":
     asyncio.run(client.start(DISCORD_USER_TOKEN))
