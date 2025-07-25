@@ -9,7 +9,6 @@ import discord  # dolfies/discord.py-self
 
 print("✅ discord loaded from:", discord.__file__, flush=True)
 
-# ───── Загрузка переменных окружения ─────
 DISCORD_USER_TOKEN = os.environ["DISCORD_USER_TOKEN"]
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CONFIG_JSON = os.environ["SUBNET_CONFIG_JSON"]
@@ -20,28 +19,33 @@ except Exception as e:
     print(f"[ERROR] Failed to parse SUBNET_CONFIG_JSON: {e}", flush=True)
     exit(1)
 
-# ───── Время завершения работы ─────
 END_TIME = datetime.now(timezone.utc) + timedelta(hours=4)
+
+# ───── Экранирование для MarkdownV2 ─────
+def escape_markdown(text: str) -> str:
+    chars_to_escape = r"\_*[]()~`>#+-=|{}.!"
+    return ''.join(f"\\{c}" if c in chars_to_escape else c for c in text)
 
 # ───── Отправка сообщений в Telegram ─────
 def send_telegram_message(chat_id: str, text: str):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    escaped = escape_markdown(text)
     payload = {
         "chat_id": chat_id,
-        "text": text,
-        "parse_mode": "HTML",
+        "text": f"```\n{escaped}\n```",
+        "parse_mode": "MarkdownV2",
         "disable_web_page_preview": True
     }
     try:
-        resp = requests.post(url, data=payload, timeout=5)
-        print(f"[TELEGRAM] Status {resp.status_code} | {text}", flush=True)
+        resp = requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                             data=payload, timeout=5)
+        print(f"[TELEGRAM] Status {resp.status_code} | {escaped}", flush=True)
     except Exception as e:
         print(f"[ERROR] Telegram send failed: {e}", flush=True)
 
 # ───── Discord client ─────
 client = discord.Client()
 
-# ───── При запуске клиента ─────
+# ───── При запуске ─────
 @client.event
 async def on_ready():
     print(f"[INFO] Logged in as {client.user} (ID: {client.user.id})", flush=True)
@@ -54,15 +58,14 @@ async def on_ready():
 
             async for msg in channel.history(limit=100, after=after):
                 if not msg.author.bot and msg.content.strip():
-                    safe_content = html.escape(msg.content)
-                    text = f"<pre>{msg.author.name}: {safe_content}</pre>"
-                    print(f"[DISCORD-HISTORY] {text}", flush=True)
-                    send_telegram_message(conf["TELEGRAM_CHAT_ID"], text)
+                    raw = f"{msg.author.name}: {msg.content}"
+                    print(f"[DISCORD-HISTORY] {raw}", flush=True)
+                    send_telegram_message(conf["TELEGRAM_CHAT_ID"], raw)
         except Exception as e:
             print(f"[ERROR] Failed for subnet {subnet_id}: {e}", flush=True)
-            send_telegram_message(conf["TELEGRAM_CHAT_ID"], f"<b>ERROR in {subnet_id}</b>: {html.escape(str(e))}")
+            send_telegram_message(conf["TELEGRAM_CHAT_ID"], f"ERROR in {subnet_id}: {str(e)}")
 
-# ───── При новом сообщении в Discord ─────
+# ───── В режиме реального времени ─────
 @client.event
 async def on_message(message):
     now = datetime.now(timezone.utc)
@@ -75,10 +78,9 @@ async def on_message(message):
         if message.channel.id == conf["DISCORD_CHANNEL_ID"]:
             try:
                 if not message.author.bot and message.content.strip():
-                    safe_content = html.escape(message.content)
-                    text = f"<b>{message.author.name}</b>: {safe_content}"
-                    print(f"[DISCORD-REALTIME] {text}", flush=True)
-                    send_telegram_message(conf["TELEGRAM_CHAT_ID"], text)
+                    raw = f"{message.author.name}: {message.content}"
+                    print(f"[DISCORD-REALTIME] {raw}", flush=True)
+                    send_telegram_message(conf["TELEGRAM_CHAT_ID"], raw)
             except Exception as e:
                 print(f"[ERROR] Realtime message error in subnet {subnet_id}: {e}", flush=True)
 
