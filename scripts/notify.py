@@ -12,7 +12,7 @@ DISCORD_USER_TOKEN = os.environ["DISCORD_USER_TOKEN"]
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 SUBNET_CONFIGS = json.loads(os.environ["SUBNET_CONFIG_JSON"])
 
-END_TIME = datetime.now(timezone.utc) + timedelta(hours=12)
+END_TIME = datetime.now(timezone.utc) + timedelta(hours=4)
 
 # === Telegram ===
 def send_telegram_message(chat_id, text):
