@@ -51,19 +51,13 @@ async def on_ready():
             print(f"[INFO] Fetching messages from {discord_channel_id} since {since.isoformat()}...")
 
             async for msg in channel.history(limit=100):
-                ts = msg.created_at
-                if ts.tzinfo is None:
-                    ts = ts.replace(tzinfo=timezone.utc)
-                else:
-                    ts = ts.astimezone(timezone.utc)
-
-                print(f"[DEBUG] {msg.author.name} at {ts.isoformat()} -> {msg.content[:80]}")
-
+                ts = msg.created_at.replace(tzinfo=timezone.utc)
                 if since <= ts <= now and msg.author.id != client.user.id:
-                    print(f"[INFO] Sending message from {msg.author.name}")
+                    print(f"[INFO] Sending message from {msg.author.name} in channel {discord_channel_id}")
                     text = f"<b>{msg.author.name}</b>: {msg.content[:4000]}"
                     send_telegram_message(telegram_chat_id, text)
-
+                else:
+                    print(f"[DEBUG] Skipped message from {msg.author.name} at {ts.isoformat()}")
         except Exception as e:
             print(f"[ERROR] Failed fetching for {discord_channel_id}: {e}")
 
