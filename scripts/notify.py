@@ -9,7 +9,6 @@ import discord  # from discord.py-self
 print("✅ discord loaded from:", discord.__file__)
 
 # === Настройки ===
-DISCORD_CHANNEL_ID = 1375534889486778409
 DISCORD_USER_TOKEN = os.environ["DISCORD_USER_TOKEN"]
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
