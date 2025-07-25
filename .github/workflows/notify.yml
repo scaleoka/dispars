@@ -1,9 +1,9 @@
-name: Discord Notify All Subnets
+# name: Discord Notify All Subnets
 
-on:
-  schedule:
-    - cron: "0 */4 * * *"  # Каждые 4 часа
-  workflow_dispatch:
+# on:
+#   schedule:
+#     - cron: "0 */4 * * *"  # Каждые 4 часа
+#   workflow_dispatch:
 
 jobs:
   notify:
