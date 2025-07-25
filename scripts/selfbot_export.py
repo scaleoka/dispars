@@ -1,101 +1,88 @@
 #!/usr/bin/env python3
-import os
-import json
 import asyncio
-from datetime import datetime, timedelta
+import json
+import os
+import requests
+import re
+from datetime import datetime, timedelta, timezone
+import discord  # dolfies/discord.py-self
 
-import discord      # pip install discord.py-self
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+print("✅ discord loaded from:", discord.__file__, flush=True)
 
-# === Настройки ===
-# CHANNEL_IDS приходит как CSV "id1,id2,id3,..."
-raw_ids = os.environ.get("CHANNEL_IDS", "")
-if raw_ids:
-    CHANNEL_IDS = [int(x.strip()) for x in raw_ids.split(",") if x.strip()]
-else:
-    CHANNEL_IDS = []
-print(f"[DEBUG] Parsed CHANNEL_IDS: {CHANNEL_IDS}")
+DISCORD_USER_TOKEN = os.environ["DISCORD_USER_TOKEN"]
+TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+CONFIG_JSON = os.environ["SUBNET_CONFIG_JSON"]
 
-WEEK_DAYS  = 7
-SHEET_ID   = os.environ["GOOGLE_SHEET_ID"]
-CREDS_JSON = os.environ["GOOGLE_CREDS_JSON"]
-USER_TOKEN = os.environ["DISCORD_USER_TOKEN"]
+try:
+    SUBNET_CONFIGS = json.loads(CONFIG_JSON)
+except Exception as e:
+    print(f"[ERROR] Failed to parse SUBNET_CONFIG_JSON: {e}", flush=True)
+    exit(1)
 
-# Инициализация Google Sheets
-creds_info = json.loads(CREDS_JSON)
-scope = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
-]
-gs_client = gspread.authorize(
-    ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
-)
+END_TIME = datetime.now(timezone.utc) + timedelta(hours=4)
 
-async def fetch_and_sheet():
-    client = discord.Client()
+# ───── Экранирование MarkdownV2 ─────
+def escape_markdown(text: str) -> str:
+    # Экранируем опасные символы, кроме ")", ":", "@", которые часто встречаются в сообщениях
+    chars_to_escape = r"\_*[]~`>#+-=|{}.!()"
+    return re.sub(rf"([{re.escape(chars_to_escape)}])", r"\\\1", text)
 
-    @client.event
-    async def on_ready():
-        cutoff = datetime.utcnow() - timedelta(days=WEEK_DAYS)
-        sheet = gs_client.open_by_key(SHEET_ID)
+# ───── Отправка в Telegram ─────
+def send_telegram_message(chat_id: str, text: str):
+    escaped = escape_markdown(text)
+    payload = {
+        "chat_id": chat_id,
+        "text": f"```\n{escaped}\n```",
+        "parse_mode": "MarkdownV2",
+        "disable_web_page_preview": True
+    }
+    try:
+        resp = requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                             data=payload, timeout=5)
+        print(f"[TELEGRAM] Status {resp.status_code} | {escaped}", flush=True)
+    except Exception as e:
+        print(f"[ERROR] Telegram send failed: {e}", flush=True)
+
+# ───── Discord client ─────
+client = discord.Client()
+
+@client.event
+async def on_ready():
+    print(f"[INFO] Logged in as {client.user} (ID: {client.user.id})", flush=True)
+
+    for subnet_id, conf in SUBNET_CONFIGS.items():
         try:
-            ws = sheet.worksheet("archive")
-            ws.clear()
-        except gspread.exceptions.WorksheetNotFound:
-            ws = sheet.add_worksheet(title="archive", rows="2000", cols="7")
+            channel = await client.fetch_channel(conf["DISCORD_CHANNEL_ID"])
+            after = datetime.now(timezone.utc) - timedelta(minutes=15)
+            print(f"[INFO] Fetching history for subnet {subnet_id} after {after.isoformat()}", flush=True)
 
-        # Заголовок
-        ws.append_row([
-            "channel_id", "channel_name", "subnet_number",
-            "message_id", "author", "timestamp", "content"
-        ])
+            async for msg in channel.history(limit=100, after=after):
+                if not msg.author.bot and msg.content.strip():
+                    raw = f"{msg.author.name}: {msg.content}"
+                    print(f"[DISCORD-HISTORY] {raw}", flush=True)
+                    send_telegram_message(conf["TELEGRAM_CHAT_ID"], raw)
+        except Exception as e:
+            print(f"[ERROR] Failed for subnet {subnet_id}: {e}", flush=True)
+            send_telegram_message(conf["TELEGRAM_CHAT_ID"], f"ERROR in {subnet_id}: {str(e)}")
 
-        all_rows = []
-        total = 0
-
-        for cid in CHANNEL_IDS:
-            print(f"[DEBUG] Processing channel {cid}...")
-            try:
-                channel = client.get_channel(cid) or await client.fetch_channel(cid)
-                print(f"[DEBUG] Resolved: {channel} (name={getattr(channel, 'name', None)})")
-            except Exception as e:
-                print(f"[ERROR] Cannot resolve channel {cid}: {e}")
-                continue
-
-            name = getattr(channel, 'name', '')
-            # номер подсети: берём часть после последнего '・'
-            parts = name.split('・')
-            try:
-                num = int(parts[-1])
-            except (ValueError, IndexError):
-                num = ''
-
-            count_this = 0
-            try:
-                async for msg in channel.history(limit=None, after=cutoff):
-                    count_this += 1
-                    total += 1
-                    all_rows.append([
-                        str(cid), name, num,
-                        str(msg.id), msg.author.name,
-                        msg.created_at.isoformat(),
-                        msg.content.replace("\n", " ")
-                    ])
-            except Exception as e:
-                print(f"[ERROR] Could not read history for {cid}: {e}")
-                continue
-
-            print(f"[DEBUG] Collected {count_this} messages for channel {cid}")
-
-        if all_rows:
-            print(f"[DEBUG] Writing {len(all_rows)} rows to sheet in batch...")
-            ws.append_rows(all_rows, value_input_option='RAW')
-
-        print(f"[INFO] Total messages written: {total}")
+@client.event
+async def on_message(message):
+    now = datetime.now(timezone.utc)
+    if now >= END_TIME:
+        print("[INFO] Reached timeout, exiting.", flush=True)
         await client.close()
+        return
 
-    await client.start(USER_TOKEN)
+    for subnet_id, conf in SUBNET_CONFIGS.items():
+        if message.channel.id == conf["DISCORD_CHANNEL_ID"]:
+            try:
+                if not message.author.bot and message.content.strip():
+                    raw = f"{message.author.name}: {message.content}"
+                    print(f"[DISCORD-REALTIME] {raw}", flush=True)
+                    send_telegram_message(conf["TELEGRAM_CHAT_ID"], raw)
+            except Exception as e:
+                print(f"[ERROR] Realtime message error in subnet {subnet_id}: {e}", flush=True)
 
+# ───── Запуск ─────
 if __name__ == "__main__":
-    asyncio.run(fetch_and_sheet())
+    asyncio.run(client.start(DISCORD_USER_TOKEN))
