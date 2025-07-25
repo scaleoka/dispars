@@ -10,7 +10,7 @@ import discord  # from discord.py-self
 print("✅ discord loaded from:", discord.__file__)
 
 # === Discord → Telegram маппинг ===
-# Пример: {"1358854051634221328": "-4864009644", "1375534889486778409": "-4987197541"}
+# Пример: {"1358854051634221328": "-4864009644", ...}
 CHANNEL_MAP = json.loads(os.environ["CHANNEL_MAP_JSON"])
 
 DISCORD_USER_TOKEN = os.environ["DISCORD_USER_TOKEN"]
@@ -41,15 +41,15 @@ async def on_ready():
     print(f"[INFO] Logged in as {client.user} (ID: {client.user.id})")
 
     now = datetime.now(timezone.utc)
-    after = now - timedelta(hours=1)
+    after = now - timedelta(minutes=10)
 
     for discord_channel_id_str, telegram_chat_id in CHANNEL_MAP.items():
         discord_channel_id = int(discord_channel_id_str)
         try:
             channel = await client.fetch_channel(discord_channel_id)
-            print(f"[INFO] Fetching messages from {discord_channel_id} since {after.isoformat()}...")
-            async for msg in channel.history(limit=100, after=after):
-                if msg.author.id != client.user.id:
+            print(f"[INFO] Fetching messages from {discord_channel_id} between {after.isoformat()} and {now.isoformat()}...")
+            async for msg in channel.history(limit=100):
+                if after <= msg.created_at <= now and msg.author.id != client.user.id:
                     text = f"<b>{msg.author.name}</b>: {msg.content}"
                     send_telegram_message(telegram_chat_id, text)
         except Exception as e:
