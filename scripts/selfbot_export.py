@@ -3,7 +3,6 @@ import asyncio
 import json
 import os
 import requests
-import re
 from datetime import datetime, timedelta, timezone
 import discord  # dolfies/discord.py-self
 
@@ -21,25 +20,17 @@ except Exception as e:
 
 END_TIME = datetime.now(timezone.utc) + timedelta(hours=4)
 
-# ───── Экранирование MarkdownV2 ─────
-def escape_markdown(text: str) -> str:
-    # Экранируем опасные символы, кроме ")", ":", "@", которые часто встречаются в сообщениях
-    chars_to_escape = r"\_*[]~`>#+-=|{}.!()"
-    return re.sub(rf"([{re.escape(chars_to_escape)}])", r"\\\1", text)
-
-# ───── Отправка в Telegram ─────
+# ───── Прямая отправка текста без форматирования ─────
 def send_telegram_message(chat_id: str, text: str):
-    escaped = escape_markdown(text)
     payload = {
         "chat_id": chat_id,
-        "text": f"```\n{escaped}\n```",
-        "parse_mode": "MarkdownV2",
+        "text": text,
         "disable_web_page_preview": True
     }
     try:
         resp = requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
                              data=payload, timeout=5)
-        print(f"[TELEGRAM] Status {resp.status_code} | {escaped}", flush=True)
+        print(f"[TELEGRAM] Status {resp.status_code} | {text}", flush=True)
     except Exception as e:
         print(f"[ERROR] Telegram send failed: {e}", flush=True)
 
