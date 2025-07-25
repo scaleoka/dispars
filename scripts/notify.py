@@ -9,12 +9,7 @@ import discord  # from discord.py-self
 print("✅ discord loaded from:", discord.__file__)
 
 # === Discord → Telegram маппинг ===
-CHANNEL_MAP = {
-    1358854051634221328: -4864009644,  # Subnet 88
-    1375534889486778409: -4987197541,  # Subnet 102
-    1370083644818849955: -4908621752,  # Subnet 103
-    1375509743753236722: -4825079054,  # Subnet 122
-}
+CHANNEL_MAP = json.loads(os.environ["CHANNEL_MAP_JSON"])
 
 DISCORD_USER_TOKEN = os.environ["DISCORD_USER_TOKEN"]
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
