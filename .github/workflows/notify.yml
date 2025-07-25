@@ -2,13 +2,13 @@ name: Discord Notify to Telegram
 
 on:
   schedule:
-    - cron: "0 * * * *"  # Каждый час (UTC)
+    - cron: "0 */4 * * *"  # Каждые 4 часа (UTC)
   workflow_dispatch:
 
 jobs:
   notify:
     runs-on: ubuntu-latest
-    timeout-minutes: 59
+    timeout-minutes: 245  # 4 часа и немного запаса
 
     steps:
       - name: Checkout repo
