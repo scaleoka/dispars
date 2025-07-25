@@ -14,9 +14,9 @@ DISCORD_USER_TOKEN = os.environ["DISCORD_USER_TOKEN"]
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 
-# === Время завершения ===
-now = datetime.now(timezone.utc)
-END_TIME = now.replace(minute=59, second=59, microsecond=0)
+# Время завершения через 4 часа
+START_TIME = datetime.now(timezone.utc)
+END_TIME = START_TIME + timedelta(hours=4)
 
 # === Telegram ===
 def send_telegram_message(text):
@@ -33,7 +33,9 @@ def send_telegram_message(text):
         print(f"[ERROR] Telegram send failed: {e}")
 
 # === Discord Client ===
-client = discord.Client()
+intents = discord.Intents.default()
+intents.message_content = True  # необходимо для чтения сообщений
+client = discord.Client(intents=intents)
 
 @client.event
 async def on_ready():
@@ -42,10 +44,11 @@ async def on_ready():
     # Получаем сообщения за предыдущий час
     now = datetime.now(timezone.utc)
     after = now - timedelta(hours=1)
+    before = now
     channel = await client.fetch_channel(DISCORD_CHANNEL_ID)
 
-    print(f"[INFO] Fetching messages after {after.isoformat()}...")
-    async for msg in channel.history(limit=100, after=after):
+    print(f"[INFO] Fetching messages between {after.isoformat()} and {before.isoformat()}...")
+    async for msg in channel.history(limit=100, after=after, before=before):
         if msg.author.id != client.user.id:
             text = f"<b>{msg.author.name}</b>: {msg.content}"
             send_telegram_message(text)
@@ -54,7 +57,7 @@ async def on_ready():
 async def on_message(message):
     now = datetime.now(timezone.utc)
     if now >= END_TIME:
-        print("[INFO] End of hour reached, closing.")
+        print("[INFO] 4 hours passed, closing connection.")
         await client.close()
         return
 
