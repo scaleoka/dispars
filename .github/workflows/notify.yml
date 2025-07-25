@@ -8,7 +8,7 @@ on:
 jobs:
   notify:
     runs-on: ubuntu-latest
-    timeout-minutes: 740  # ≈12 часов
+    timeout-minutes: 250  # 4 часа + запас
 
     steps:
       - name: Checkout repo
