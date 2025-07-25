@@ -4,12 +4,14 @@ import sys
 import asyncio
 import requests
 import json
+import html
 from datetime import datetime, timedelta, timezone
 import discord  # from discord.py-self
 
 print("✅ discord loaded from:", discord.__file__)
 
 # === Discord → Telegram маппинг ===
+# Пример: {"1358854051634221328": "-4864009644", ...}
 CHANNEL_MAP = json.loads(os.environ["CHANNEL_MAP_JSON"])
 
 DISCORD_USER_TOKEN = os.environ["DISCORD_USER_TOKEN"]
@@ -28,11 +30,11 @@ def send_telegram_message(chat_id, text):
         "disable_web_page_preview": True
     }
     try:
-        response = requests.post(url, data=payload, timeout=5)
-        if response.status_code != 200:
-            print(f"[ERROR] Telegram send failed ({response.status_code}): {response.text}")
+        resp = requests.post(url, data=payload, timeout=5)
+        if resp.status_code != 200:
+            print(f"[ERROR] Telegram send failed ({resp.status_code}): {resp.text}")
     except Exception as e:
-        print(f"[ERROR] Telegram send failed: {e}")
+        print(f"[ERROR] Telegram send exception: {e}")
 
 # === Discord Client ===
 client = discord.Client()
@@ -42,22 +44,19 @@ async def on_ready():
     print(f"[INFO] Logged in as {client.user} (ID: {client.user.id})")
 
     now = datetime.now(timezone.utc)
-    since = now - timedelta(minutes=10)
+    after = now - timedelta(minutes=10)
 
     for discord_channel_id_str, telegram_chat_id in CHANNEL_MAP.items():
         discord_channel_id = int(discord_channel_id_str)
         try:
             channel = await client.fetch_channel(discord_channel_id)
-            print(f"[INFO] Fetching messages from {discord_channel_id} since {since.isoformat()}...")
-
-            async for msg in channel.history(limit=100):
-                ts = msg.created_at.replace(tzinfo=timezone.utc)
-                if since <= ts <= now and msg.author.id != client.user.id:
+            print(f"[INFO] Fetching messages from {discord_channel_id} since {after.isoformat()}...")
+            async for msg in channel.history(limit=100, after=after):
+                if msg.author.id != client.user.id:
+                    clean_text = html.escape(msg.content)
+                    text = f"<b>{html.escape(msg.author.name)}</b>: {clean_text}"
                     print(f"[INFO] Sending message from {msg.author.name} in channel {discord_channel_id}")
-                    text = f"<b>{msg.author.name}</b>: {msg.content[:4000]}"
                     send_telegram_message(telegram_chat_id, text)
-                else:
-                    print(f"[DEBUG] Skipped message from {msg.author.name} at {ts.isoformat()}")
         except Exception as e:
             print(f"[ERROR] Failed fetching for {discord_channel_id}: {e}")
 
@@ -71,7 +70,9 @@ async def on_message(message):
 
     channel_id_str = str(message.channel.id)
     if channel_id_str in CHANNEL_MAP and message.author != client.user:
-        text = f"<b>{message.author.name}</b>: {message.content[:4000]}"
+        clean_text = html.escape(message.content)
+        text = f"<b>{html.escape(message.author.name)}</b>: {clean_text}"
+        print(f"[INFO] [LIVE] Sending from {message.author.name} in channel {channel_id_str}")
         send_telegram_message(CHANNEL_MAP[channel_id_str], text)
 
 if __name__ == "__main__":
