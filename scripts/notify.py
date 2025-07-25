@@ -54,7 +54,7 @@ async def on_ready():
 
             async for msg in channel.history(limit=100, after=after):
                 if not msg.author.bot and msg.content.strip():
-                    safe_content = html.escape(msg.content)
+                    safe_content = html.escape(msg.content).replace("\n", "<br>")
                     text = f"<b>{msg.author.name}</b>: {safe_content}"
                     print(f"[DISCORD-HISTORY] {text}", flush=True)
                     send_telegram_message(conf["TELEGRAM_CHAT_ID"], text)
