@@ -3,13 +3,14 @@ import os
 import sys
 import asyncio
 import requests
+import json
 from datetime import datetime, timedelta, timezone
 import discord  # from discord.py-self
-import json
 
 print("✅ discord loaded from:", discord.__file__)
 
 # === Discord → Telegram маппинг ===
+# Пример: {"1358854051634221328": "-4864009644", "1375534889486778409": "-4987197541"}
 CHANNEL_MAP = json.loads(os.environ["CHANNEL_MAP_JSON"])
 
 DISCORD_USER_TOKEN = os.environ["DISCORD_USER_TOKEN"]
@@ -42,10 +43,11 @@ async def on_ready():
     now = datetime.now(timezone.utc)
     after = now - timedelta(hours=1)
 
-    # Ищем сообщения за предыдущий час
-    for discord_channel_id, telegram_chat_id in CHANNEL_MAP.items():
+    for discord_channel_id_str, telegram_chat_id in CHANNEL_MAP.items():
+        discord_channel_id = int(discord_channel_id_str)
         try:
             channel = await client.fetch_channel(discord_channel_id)
+            print(f"[INFO] Fetching messages from {discord_channel_id} since {after.isoformat()}...")
             async for msg in channel.history(limit=100, after=after):
                 if msg.author.id != client.user.id:
                     text = f"<b>{msg.author.name}</b>: {msg.content}"
@@ -61,9 +63,10 @@ async def on_message(message):
         await client.close()
         return
 
-    if message.channel.id in CHANNEL_MAP and message.author != client.user:
+    channel_id_str = str(message.channel.id)
+    if channel_id_str in CHANNEL_MAP and message.author != client.user:
         text = f"<b>{message.author.name}</b>: {message.content}"
-        send_telegram_message(CHANNEL_MAP[message.channel.id], text)
+        send_telegram_message(CHANNEL_MAP[channel_id_str], text)
 
 if __name__ == "__main__":
     asyncio.run(client.start(DISCORD_USER_TOKEN))
