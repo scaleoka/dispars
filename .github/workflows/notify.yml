@@ -1,14 +1,14 @@
-name: Discord Notify to Telegram
+name: Discord Notify All Subnets
 
 on:
   schedule:
-    - cron: "0 */4 * * *"  # Каждые 4 часа (UTC)
+    - cron: "0 */4 * * *"  # Каждые 4 часа
   workflow_dispatch:
 
 jobs:
   notify:
     runs-on: ubuntu-latest
-    timeout-minutes: 245  # 4 часа и немного запаса
+    timeout-minutes: 740  # ≈12 часов
 
     steps:
       - name: Checkout repo
@@ -21,10 +21,9 @@ jobs:
           rm -rf ~/.cache/pip
           pip install git+https://github.com/dolfies/discord.py-self.git requests
 
-      - name: Run notify script (with debug)
+      - name: Run notify script
         env:
           DISCORD_USER_TOKEN: ${{ secrets.DISCORD_USER_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          CHANNEL_MAP_JSON:   ${{ secrets.CHANNEL_MAP_JSON }}
-        run: |
-          python scripts/notify.py
+          SUBNET_CONFIG_JSON: ${{ secrets.SUBNET_CONFIG_JSON }}
+        run: python scripts/notify.py
