@@ -5,6 +5,7 @@ import asyncio
 import requests
 from datetime import datetime, timedelta, timezone
 import discord  # from discord.py-self
+import json
 
 print("✅ discord loaded from:", discord.__file__)
 
