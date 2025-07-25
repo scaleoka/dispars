@@ -20,11 +20,11 @@ except Exception as e:
 
 END_TIME = datetime.now(timezone.utc) + timedelta(hours=4)
 
-# ───── Отправка plain text сообщений в Telegram ─────
+# ───── Прямая отправка plain text в Telegram ─────
 def send_telegram_message(chat_id: str, text: str):
     payload = {
         "chat_id": chat_id,
-        "text": text,  # Никаких Markdown или HTML!
+        "text": text,
         "disable_web_page_preview": True
     }
     try:
@@ -51,10 +51,19 @@ async def on_ready():
             print(f"[INFO] Fetching history for subnet {subnet_id} after {after.isoformat()}", flush=True)
 
             async for msg in channel.history(limit=100, after=after):
-                if not msg.author.bot and msg.content.strip():
-                    raw = f"{msg.author.name}: {msg.content}"
-                    print(f"[DISCORD-HISTORY] {raw}", flush=True)
-                    send_telegram_message(conf["TELEGRAM_CHAT_ID"], raw)
+                if not msg.author.bot:
+                    content = msg.content or ""
+
+                    if msg.embeds:
+                        for embed in msg.embeds:
+                            if embed.description:
+                                content += f"\n{embed.description}"
+
+                    if content.strip():
+                        raw = f"{msg.author.name}: {content}"
+                        print(f"[DISCORD-HISTORY] {raw}", flush=True)
+                        send_telegram_message(conf["TELEGRAM_CHAT_ID"], raw)
+
         except Exception as e:
             print(f"[ERROR] Failed for subnet {subnet_id}: {e}", flush=True)
             send_telegram_message(conf["TELEGRAM_CHAT_ID"], f"ERROR in {subnet_id}: {str(e)}")
@@ -70,13 +79,22 @@ async def on_message(message):
     for subnet_id, conf in SUBNET_CONFIGS.items():
         if message.channel.id == conf["DISCORD_CHANNEL_ID"]:
             try:
-                if not message.author.bot and message.content.strip():
-                    raw = f"{message.author.name}: {message.content}"
-                    print(f"[DISCORD-REALTIME] {raw}", flush=True)
-                    send_telegram_message(conf["TELEGRAM_CHAT_ID"], raw)
+                if not message.author.bot:
+                    content = message.content or ""
+
+                    if message.embeds:
+                        for embed in message.embeds:
+                            if embed.description:
+                                content += f"\n{embed.description}"
+
+                    if content.strip():
+                        raw = f"{message.author.name}: {content}"
+                        print(f"[DISCORD-REALTIME] {raw}", flush=True)
+                        send_telegram_message(conf["TELEGRAM_CHAT_ID"], raw)
+
             except Exception as e:
                 print(f"[ERROR] Realtime message error in subnet {subnet_id}: {e}", flush=True)
 
-# ───── Запуск клиента ─────
+# ───── Запуск ─────
 if __name__ == "__main__":
     asyncio.run(client.start(DISCORD_USER_TOKEN))
