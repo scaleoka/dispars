@@ -40,6 +40,18 @@ def send_telegram_message(chat_id: str, text: str):
 # ───── Discord client ─────
 client = discord.Client()
 
+# ───── Обработка embed-блоков ─────
+def extract_message_content(msg: discord.Message) -> str:
+    content = msg.content or ""
+
+    for embed in msg.embeds:
+        if embed.description:
+            content += f"\n{embed.description}"
+        for field in embed.fields:
+            content += f"\n{field.name}: {field.value}"
+
+    return content.strip()
+
 @client.event
 async def on_ready():
     print(f"[INFO] Logged in as {client.user} (ID: {client.user.id})", flush=True)
@@ -52,14 +64,8 @@ async def on_ready():
 
             async for msg in channel.history(limit=100, after=after):
                 if not msg.author.bot:
-                    content = msg.content or ""
-
-                    if msg.embeds:
-                        for embed in msg.embeds:
-                            if embed.description:
-                                content += f"\n{embed.description}"
-
-                    if content.strip():
+                    content = extract_message_content(msg)
+                    if content:
                         raw = f"{msg.author.name}: {content}"
                         print(f"[DISCORD-HISTORY] {raw}", flush=True)
                         send_telegram_message(conf["TELEGRAM_CHAT_ID"], raw)
@@ -80,18 +86,11 @@ async def on_message(message):
         if message.channel.id == conf["DISCORD_CHANNEL_ID"]:
             try:
                 if not message.author.bot:
-                    content = message.content or ""
-
-                    if message.embeds:
-                        for embed in message.embeds:
-                            if embed.description:
-                                content += f"\n{embed.description}"
-
-                    if content.strip():
+                    content = extract_message_content(message)
+                    if content:
                         raw = f"{message.author.name}: {content}"
                         print(f"[DISCORD-REALTIME] {raw}", flush=True)
                         send_telegram_message(conf["TELEGRAM_CHAT_ID"], raw)
-
             except Exception as e:
                 print(f"[ERROR] Realtime message error in subnet {subnet_id}: {e}", flush=True)
 
