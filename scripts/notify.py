@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 import os
-import sys
 import asyncio
 import requests
 import json
-import html
+import re
 from datetime import datetime, timedelta, timezone
 import discord  # from discord.py-self
 
@@ -20,6 +19,16 @@ TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 END_TIME = datetime.now(timezone.utc) + timedelta(hours=4)
 
 # === Telegram ===
+def escape_html(text: str) -> str:
+    return (text.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;"))
+
+def sanitize_message_content(content: str) -> str:
+    # Удалим упоминания вроде <@1234567890>
+    content = re.sub(r"<@!?(\d+)>", "@user", content)
+    return escape_html(content)
+
 def send_telegram_message(chat_id, text):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
@@ -29,9 +38,9 @@ def send_telegram_message(chat_id, text):
         "disable_web_page_preview": True
     }
     try:
-        response = requests.post(url, data=payload, timeout=5)
-        if not response.ok:
-            print(f"[ERROR] Telegram send failed ({response.status_code}): {response.text}")
+        resp = requests.post(url, data=payload, timeout=5)
+        if not resp.ok:
+            print(f"[ERROR] Telegram send failed ({resp.status_code}): {resp.text}")
     except Exception as e:
         print(f"[ERROR] Telegram send exception: {e}")
 
@@ -50,18 +59,16 @@ async def on_ready():
         try:
             channel = await client.fetch_channel(discord_channel_id)
             print(f"[INFO] Fetching messages from {discord_channel_id} since {after.isoformat()}...")
+
             async for msg in channel.history(limit=100, after=after):
-                print(f"[DEBUG] Message at {msg.created_at} from {msg.author}: {repr(msg.content)}")
-                if msg.author.id != client.user.id:
-                    if msg.content.strip():
-                        clean_text = html.escape(msg.content)
-                        text = f"<b>{html.escape(msg.author.name)}</b>: {clean_text}"
-                        print(f"[INFO] Sending message from {msg.author.name} to TG chat {telegram_chat_id}")
-                        send_telegram_message(telegram_chat_id, text)
-                    else:
-                        print("[INFO] Skipping message with no text content.")
+                if msg.author.id == client.user.id:
+                    continue
+                clean = sanitize_message_content(msg.content)
+                text = f"<b>{escape_html(msg.author.name)}</b>: {clean}"
+                print(f"[INFO] Sending message from {msg.author.name} in channel {discord_channel_id}")
+                send_telegram_message(telegram_chat_id, text)
         except Exception as e:
-            print(f"[ERROR] Failed fetching for {discord_channel_id}: {e}")
+            print(f"[ERROR] Failed fetching from {discord_channel_id}: {e}")
 
 @client.event
 async def on_message(message):
@@ -72,14 +79,19 @@ async def on_message(message):
         return
 
     channel_id_str = str(message.channel.id)
-    if channel_id_str in CHANNEL_MAP and message.author != client.user:
-        if message.content.strip():
-            clean_text = html.escape(message.content)
-            text = f"<b>{html.escape(message.author.name)}</b>: {clean_text}"
-            print(f"[INFO] [LIVE] {message.author.name}: {message.content}")
-            send_telegram_message(CHANNEL_MAP[channel_id_str], text)
-        else:
-            print("[INFO] [LIVE] Skipping message with no text content.")
+    if channel_id_str in CHANNEL_MAP and message.author.id != client.user.id:
+        clean = sanitize_message_content(message.content)
+        text = f"<b>{escape_html(message.author.name)}</b>: {clean}"
+        print(f"[INFO] Live message from {message.author.name} in channel {channel_id_str}")
+        send_telegram_message(CHANNEL_MAP[channel_id_str], text)
+
+@client.event
+async def on_error(event, *args, **kwargs):
+    print(f"[ERROR] Uncaught error in {event}: {args}, {kwargs}")
 
 if __name__ == "__main__":
-    asyncio.run(client.start(DISCORD_USER_TOKEN))
+    print("[DEBUG] Starting Discord client...")
+    try:
+        asyncio.run(client.start(DISCORD_USER_TOKEN))
+    except Exception as e:
+        print(f"[FATAL] Discord client failed to start: {e}")
