@@ -2,6 +2,7 @@
 import os
 import json
 import re
+import time
 from datetime import datetime, timedelta
 from collections import defaultdict
 import openai
@@ -95,7 +96,7 @@ system_prompt = (
 )
 
 # --- БАТЧЕВАЯ GPT-ОБРАБОТКА ---
-BATCH_SIZE = 20
+BATCH_SIZE = 10   # <= для снижения нагрузки
 
 subnet_items = list(messages_by_subnet.items())
 all_updates = {}
@@ -113,14 +114,26 @@ for batch_start in range(0, len(subnet_items), BATCH_SIZE):
         f"В предоставленных сообщениях встречаются только подсети: {batch_list_str}.\n\n"
         f"{batch_prompt}"
     )
-    response = openai.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        temperature=0
-    )
+
+    # --- ОБРАБОТКА RATE LIMIT ---
+    for attempt in range(10):
+        try:
+            response = openai.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0
+            )
+            break
+        except openai.RateLimitError:
+            wait_sec = 5 + attempt * 5
+            print(f"💤 Rate limit exceeded, ждём {wait_sec} секунд...")
+            time.sleep(wait_sec)
+    else:
+        raise Exception("Не удалось получить ответ от OpenAI: Rate limit не исчез после повторных попыток")
+
     result = response.choices[0].message.content.strip()
     print(f"📤 Ответ GPT для батча {batch_start // BATCH_SIZE + 1} (первые 500 символов):")
     print(result[:500])
