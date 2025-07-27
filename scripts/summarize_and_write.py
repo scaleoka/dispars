@@ -34,19 +34,22 @@ def estimate_tokens(text):
 
 # --- Подготовка ---
 print("🔄 Загрузка данных из таблицы...")
-yesterday = datetime.utcnow().date() - timedelta(days=1)
+
+# !!! ФИКСИРОВАННАЯ ДАТА !!!
+target_date = datetime.strptime("25.07.2025", "%d.%m.%Y").date()
+
 sh_src = gc.open_by_key(GOOGLE_SHEET_ID)
 df = sh_src.worksheet("archive").get_all_records()
 
 messages_by_subnet = defaultdict(list)
 
 for row in df:
-    if parse_date(row['timestamp']) == yesterday.strftime('%d.%m.%Y'):
+    if parse_date(row['timestamp']) == target_date.strftime('%d.%m.%Y'):
         subnet = str(row['subnet_number'])
         messages_by_subnet[subnet].append(row['content'])
 
 if not messages_by_subnet:
-    print("⚠️ Нет сообщений за вчера.")
+    print("⚠️ Нет сообщений за 25.07.2025.")
     exit()
 
 actual_subnets = set(messages_by_subnet.keys())
@@ -161,15 +164,15 @@ if set(all_updates.keys()) - actual_subnets:
 sh_dst = gc.open_by_key(GOOGLE_SHEET2_ID)
 sheet = sh_dst.worksheet("Dis и выводы")
 header = sheet.row_values(1)
-yesterday_str = yesterday.strftime('%d.%m.%Y')
+target_date_str = target_date.strftime('%d.%m.%Y')
 
 # Если нет колонки с нужной датой — добавить в конец!
-if not any(h.strip() == yesterday_str for h in header):
-    sheet.update_cell(1, len(header) + 1, yesterday_str)
-    print(f"➕ Добавлена новая колонка для даты: {yesterday_str}")
-    header.append(yesterday_str)  # чтобы col вычислился верно
+if not any(h.strip() == target_date_str for h in header):
+    sheet.update_cell(1, len(header) + 1, target_date_str)
+    print(f"➕ Добавлена новая колонка для даты: {target_date_str}")
+    header.append(target_date_str)  # чтобы col вычислился верно
 
-col = next(i for i, h in enumerate(header) if h.strip() == yesterday_str) + 1
+col = next(i for i, h in enumerate(header) if h.strip() == target_date_str) + 1
 
 netids = [str(int(i)) for i in sheet.col_values(1)[1:] if i.strip()]
 
