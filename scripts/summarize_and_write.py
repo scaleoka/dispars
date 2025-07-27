@@ -163,34 +163,14 @@ sheet = sh_dst.worksheet("Dis и выводы")
 header = sheet.row_values(1)
 yesterday_str = yesterday.strftime('%d.%m.%Y')
 
-# === БЛОК ВСТАВКИ КОЛОНКИ РЯДОМ С ПРЕДЫДУЩЕЙ ДАТОЙ ===
+# === БЛОК: если нужной даты нет в первой строке — создаём столбец справа ===
 if not any(h.strip() == yesterday_str for h in header):
-    # Найдём все даты в заголовке
-    date_headers = [(i, h.strip()) for i, h in enumerate(header) if re.match(r'\d{2}\.\d{2}\.\d{4}', h.strip())]
-    previous_date_idx = None
-    for idx, date_str in reversed(date_headers):
-        try:
-            cur_date = datetime.strptime(date_str, '%d.%m.%Y').date()
-            if cur_date < yesterday:
-                previous_date_idx = idx
-                break
-        except:
-            continue
-    # Если нашли предыдущую дату — вставим столбец справа от неё
-    if previous_date_idx is not None:
-        insert_col = previous_date_idx + 2  # gspread индекс с 1
-        sheet.add_cols(1)
-        sheet.insert_cols([[""]]*(len(header)+2), col=insert_col)
-        sheet.update_cell(1, insert_col, yesterday_str)
-        print(f"➕ Вставлена колонка для даты {yesterday_str} после {header[previous_date_idx]}")
-        header.insert(insert_col - 1, yesterday_str)
-        col = insert_col
-    else:
-        # Если предыдущей даты нет — добавить в конец
-        sheet.update_cell(1, len(header) + 1, yesterday_str)
-        print(f"➕ Добавлена новая колонка для даты: {yesterday_str}")
-        header.append(yesterday_str)
-        col = len(header)
+    new_col_index = len(header) + 1  # gspread uses 1-based index
+    sheet.add_cols(1)
+    sheet.update_cell(1, new_col_index, yesterday_str)
+    print(f"➕ Добавлена новая колонка для даты: {yesterday_str}")
+    header.append(yesterday_str)
+    col = new_col_index
 else:
     col = next(i for i, h in enumerate(header) if h.strip() == yesterday_str) + 1
 
