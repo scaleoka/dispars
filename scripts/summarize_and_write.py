@@ -34,22 +34,19 @@ def estimate_tokens(text):
 
 # --- Подготовка ---
 print("🔄 Загрузка данных из таблицы...")
-
-# !!! ФИКСИРОВАННАЯ ДАТА !!!
-target_date = datetime.strptime("25.07.2025", "%d.%m.%Y").date()
-
+yesterday = datetime.utcnow().date() - timedelta(days=1)
 sh_src = gc.open_by_key(GOOGLE_SHEET_ID)
 df = sh_src.worksheet("archive").get_all_records()
 
 messages_by_subnet = defaultdict(list)
 
 for row in df:
-    if parse_date(row['timestamp']) == target_date.strftime('%d.%m.%Y'):
+    if parse_date(row['timestamp']) == yesterday.strftime('%d.%m.%Y'):
         subnet = str(row['subnet_number'])
         messages_by_subnet[subnet].append(row['content'])
 
 if not messages_by_subnet:
-    print("⚠️ Нет сообщений за 25.07.2025.")
+    print("⚠️ Нет сообщений за вчера.")
     exit()
 
 actual_subnets = set(messages_by_subnet.keys())
@@ -164,15 +161,38 @@ if set(all_updates.keys()) - actual_subnets:
 sh_dst = gc.open_by_key(GOOGLE_SHEET2_ID)
 sheet = sh_dst.worksheet("Dis и выводы")
 header = sheet.row_values(1)
-target_date_str = target_date.strftime('%d.%m.%Y')
+yesterday_str = yesterday.strftime('%d.%m.%Y')
 
-# Если нет колонки с нужной датой — добавить в конец!
-if not any(h.strip() == target_date_str for h in header):
-    sheet.update_cell(1, len(header) + 1, target_date_str)
-    print(f"➕ Добавлена новая колонка для даты: {target_date_str}")
-    header.append(target_date_str)  # чтобы col вычислился верно
-
-col = next(i for i, h in enumerate(header) if h.strip() == target_date_str) + 1
+# === БЛОК ВСТАВКИ КОЛОНКИ РЯДОМ С ПРЕДЫДУЩЕЙ ДАТОЙ ===
+if not any(h.strip() == yesterday_str for h in header):
+    # Найдём все даты в заголовке
+    date_headers = [(i, h.strip()) for i, h in enumerate(header) if re.match(r'\d{2}\.\d{2}\.\d{4}', h.strip())]
+    previous_date_idx = None
+    for idx, date_str in reversed(date_headers):
+        try:
+            cur_date = datetime.strptime(date_str, '%d.%m.%Y').date()
+            if cur_date < yesterday:
+                previous_date_idx = idx
+                break
+        except:
+            continue
+    # Если нашли предыдущую дату — вставим столбец справа от неё
+    if previous_date_idx is not None:
+        insert_col = previous_date_idx + 2  # gspread индекс с 1
+        sheet.add_cols(1)
+        sheet.insert_cols([[""]]*(len(header)+2), col=insert_col)
+        sheet.update_cell(1, insert_col, yesterday_str)
+        print(f"➕ Вставлена колонка для даты {yesterday_str} после {header[previous_date_idx]}")
+        header.insert(insert_col - 1, yesterday_str)
+        col = insert_col
+    else:
+        # Если предыдущей даты нет — добавить в конец
+        sheet.update_cell(1, len(header) + 1, yesterday_str)
+        print(f"➕ Добавлена новая колонка для даты: {yesterday_str}")
+        header.append(yesterday_str)
+        col = len(header)
+else:
+    col = next(i for i, h in enumerate(header) if h.strip() == yesterday_str) + 1
 
 netids = [str(int(i)) for i in sheet.col_values(1)[1:] if i.strip()]
 
